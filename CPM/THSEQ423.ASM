@@ -438,10 +438,13 @@ STOPNOW:  LDA SWITMASK        ;timed-out stop or switched stop ?
 
 SENSPROJ: IN SWITCHX          ;projector home ?
 	  SENSEM
+	  LXI H,XOR180ST      ;XOR with sync-180 status = CMA @180, NOP @360
+	  XRA M
 	  BIT XHMP,A
 	  JNZ STOPGAP         ;wait
 	  IN SWITCHX          ;projector home ?
 	  SENSEM
+	  XRA M
 	  BIT XHMP,A
 	  JNZ STOPGAP         ;wait
 	  JZ  STOPRUN         ;stop
@@ -1136,16 +1139,22 @@ WAITTRGP: IN TRIGPORT         ;else wait for switch release
 	  LXI H,1             ;preset 1 single frame only
 	  SHLD FRAMEABS
 
-	  LDA SYN180ST	      ;sunc-180 active ?
+	  LDA SYN180ST	      ;sync-180 active ?
 	  ORA A
 	  JZ  TRGPRJ
+
+	  LDA RUN180ST        ;toggle sync-180 run and XOR status
+	  CMA
+	  STA RUN180ST
+	  STA TRG180ST
+	  STA XOR180ST
 
 	  LHLD REVLNCNT	      ;then run only half-rev at a time
 	  SRLR H
 	  RARR L
 	  SHLD REVLNCNT
-	  MVI A,TRUE
-	  STA SWITSTAT
+;;	  MVI A,TRUE
+;;	  STA SWITSTAT
 
 TRGPRJ:	  CALL RUNIT          ;then run it...
 
@@ -1173,6 +1182,7 @@ TRGPRJ:	  CALL RUNIT          ;then run it...
 	  CALL PUTCAMPR       ;update all data
 
 	  XRA A
+	  STA TRG180ST
 	  CMA
 	  ORA A
 	  RET
@@ -1499,6 +1509,16 @@ OUTPRJCT: LXI H,MPRJ          ;display projector id
 	  MVI B,6
 	  MVI C,C6
 	  CALL OUTLCDN
+
+	  LDA RUN180ST        ;sync-180 run-time status ?
+	  ORA A
+	  PUSH PSW
+	  MVI A,0FDh	      ;division glyph
+	  CNZ OUTLCD
+	  POP PSW
+	  MVI A,' '
+	  CZ  OUTLCD
+
 	  LDA PRJDIRST        ;display projector direction
 	  ORA A
 	  LXI H,MOKF+2
@@ -4137,6 +4157,13 @@ SKIPSYNC: LHLD STEPRCNT       ;transfer camera step printer count
 	  STA PROJSTAT        ;if sequencer, then start with camera
 	  CALL GETCAMPR       ;...and load camera data accordingly
 
+	  LDA RUN180ST        ;sync-180 already run?
+	  ORA A
+	  JNZ SKIP180
+	  CMA
+	  STA RUN180ST
+	  STA XOR180ST        ;else toggle sync-180 XOR switch sense
+
 	  LHLD OPNSHCNT	      ;run projector motor to 180-sync
 	  SHLD STEPCNT
 	  MVI A,TRUE
@@ -4145,8 +4172,8 @@ SKIPSYNC: LHLD STEPRCNT       ;transfer camera step printer count
 
 	  CALL MOTORON	      ;run motor
 	  CALL INITMOTR
-	  MVI A,TRUE
-	  STA SWITMASK
+;;	  MVI A,TRUE
+;;	  STA SWITMASK
 
 WAIT180:  LDA MOTROVER	      ;wait til over
 	  ORA A
@@ -4155,7 +4182,7 @@ WAIT180:  LDA MOTROVER	      ;wait til over
 	  STA PROJSTAT
 	  CALL GETCAMPR
 
-	  LDA STEPSTAT        ;step camera ?
+SKIP180:  LDA STEPSTAT        ;step camera ?
 	  MOV B,A
 	  LDA SKIPSTAT        ;... OR skip projector ?
 	  ORA B
@@ -4250,6 +4277,7 @@ RUNLOOP:  LDA SEQSTAT         ;sequence camera or projector ?
 	  ORA A
 	  CNZ SEQUENCR
 
+if 0
 	  LHLD RUNFRAME	      ;last frame pending ?
 	  DCX H
 	  MOV A,H
@@ -4265,12 +4293,17 @@ RUNLOOP:  LDA SEQSTAT         ;sequence camera or projector ?
 	  CMA                 ;not and
 	  ORA B               ;or zero
 	  JZ EXITLOOP	      ;...then finish with sync-180 frame instead
+endif
+
+	  LDA TRG180ST        ;ignore trigger sync-180 update ?
+	  ORA A
+	  JNZ RUNTRIG
 
 	  CALL UPDTCNTR       ;pre-update total frame counter
 	  CALL UPDTCNTS       ;+ update all sequencer / sync counters
 	  CALL UPDTCNTF	      ;+ fade counter
 
-	  CALL TRIGRON        ;fire output trigger during single frame
+RUNTRIG:  CALL TRIGRON        ;fire output trigger during single frame
 
 	  LHLD REVLNCNT       ;pre-transfer full revolution step count
 	  SHLD STEPCNT
@@ -4329,6 +4362,7 @@ SKIPEXP:  CALL MOTORON        ;motor control signals on
 	  ORA A
 	  CZ  INITFADR	      ;run fader shutter motor too if camera frame
 
+if 0
 	  LDA SEQSTAT	      ;ignore sequenced projector home if 180-sync
 	  MOV B,A
 	  LDA PROJSTAT
@@ -4337,6 +4371,10 @@ SKIPEXP:  CALL MOTORON        ;motor control signals on
 	  LDA SWITSTAT
 	  ORA B
 	  STA SWITMASK
+else
+	  LDA SWITSTAT
+	  STA SWITMASK
+endif
 
 	  ORA A		      ;adjust pre-decel step count if home sensing
 	  JNZ WAITOVER
@@ -4448,9 +4486,10 @@ SKPOUT0:  LDA CNTRSTAT        ;either projector active at all ?
 	  SHLD PROJCTBF
 
 SKPCNTSW: LDA SEQSTAT         ;clean up sequencer stuff ?
-          ORA A
-          RZ
+	  ORA A
+	  RZ
 
+if 0
 	  LHLD CLOSHCNT	      ;run projector motor to 360-sync
 	  SHLD STEPCNT
 	  MVI A,TRUE
@@ -4468,6 +4507,8 @@ WAIT360:  LDA MOTROVER	      ;wait til over
 	  CALL UPDTCNTR	      ;update this half-rev as complete frame
 *	  CALL UPDTCNTS
 *	  CALL UPDTCNTF
+endif
+
 	  CALL PUTCAMPR
 	  CALL OUTCNTRS
 
@@ -6634,8 +6675,11 @@ INITVARS: LXI H,0
 	  STA FADEDIR
 	  STA FADEMEM
 	  STA OUTFRMST	      ;no out frame
-	  STA SYN180ST	      ;no sync-180
 	  STA RACKSTAT	      ;no rack-over
+	  STA SYN180ST	      ;no sync-180
+	  STA RUN180ST	      ;no sync-180 run
+	  STA TRG180ST        ;no sync-180 trigger overide
+	  STA XOR180ST	      ;no sync-180 XOR switch
 
 	  LXI H,DSPEED
 	  SHLD SPEED          ;film speed
@@ -6902,7 +6946,10 @@ PRJSYNST: DS 1           ;projector sync
 AERSYNST: DS 1           ;aerial projector sync
 SYNCMASK: DS 1		 ;camera, projector, aerial sync bitmask
 SYN180ST: DS 1		 ;sync-180 status
-RACKSTAT: DS 1		 ;rack=over status
+RUN180ST: DS 1		 ;sync-180 run status
+TRG180ST: DS 1		 ;sync-180 trigger overide status
+XOR180ST: DS 1		 ;sync-180 XOR switch sense status
+RACKSTAT: DS 1		 ;rack-over status
 
 CUESTAT:  DS 1		 ;cue frame status
 CUEFRAME: DS 2		 ;cue frame counter #
