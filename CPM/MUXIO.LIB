@@ -1,0 +1,322 @@
+; Multiplexer Input / Output Interface routines:
+
+; INMUXST:	gets multiplexer input status
+; INMUX:	gets multiplexer input character
+; WAITMUX:	waits for multiplexer input
+; OUTMUX3:	outputs 3-character prompt string
+; OUTMUX5:	outputs 5-character digit string
+; OUTMDX5:	outputs 5-character decimal string
+; OUTMSX5:      outputs 5-character text string
+; OUTEOLN:	outputs End-of-Line to serial interface
+
+
+
+
+; MUXIO Equates moved out of macro definition to save space.
+
+CR:       EQU 0DH               ;carriage return
+LF:       EQU 0AH               ;line feed
+BS:       EQU 08H               ;back space
+
+
+
+
+; Multiplexed Keypad / Display and Serial Input / Output.
+
+	  IF SERIALIO
+
+MUXIOM    MACRO
+
+
+; Query input status from either Keypad or Serial port.
+
+INMUXST:  CALL INKEYST          ;input from keypad ?
+	  MOV C,A               ;save status
+	  CALL INSIOST          ;input from SIO port ?
+	  ORA C                 ;keypad status OR serial port status ?
+	  RET
+
+; Input from either Keypad or Serial port.
+
+INMUX:    CALL INKEYST          ;input from keypad ?
+	  ORA A                 ;(save Z-flag, clear C-flag)
+	  CNZ INKEY             ;then get key from keypad
+	  RC
+
+	  CALL INSIOST          ;input from SIO port ?
+	  ORA A
+	  CNZ INCHAR            ;then get character-as-key from SIO port
+	  RC
+
+	  RET
+
+; Get character from SIO port and map according to keypad code.
+; Carry flag is set and mapped key code is buffered, as in INKEY routine.
+
+INCHAR:   CALL INSIOST          ;input from SIO port ?
+	  ORA A                 ;pre-clear Carry flag
+	  RZ
+
+	  CALL INSIO            ;get input character from SIO port
+	  IF KEYLONG
+	  LXI B,32              ;search SIO code table for match
+	  ELSE
+	  LXI B,16              ;search SIO code table for match
+	  ENDIF
+	  LXI H,SIOCODE
+	  CCIR
+	  MOV A,C               ;counter = table index
+	  STA KEYBUF            ;save key code #
+	  STC                   ;set Carry flag
+	  RZ                    ;...if as long as match was actually found
+	  CMC                   ;...else re-clear Carry flag
+	  RET
+
+; Serial input port character-to-keycode map table.
+; Ascii character codes are mapped in same order as row/column codes.
+; Refer to KEYIO.LIB for keypad row/column mapping order.
+
+SIOCODE:
+	  IF KEYLONG
+
+	  DB 'E'
+	  DB 'F'
+	  DB 'G'
+	  DB 'H'
+	  DB 'A'
+	  DB 'B'
+	  DB 'C'
+	  DB 'D'
+	  DB  0
+	  DB  0
+	  DB  0
+	  DB  0
+	  DB  0
+	  DB  0
+	  DB  0
+	  DB  0
+
+	  ENDIF         ;KEYLONG
+
+	  IF PHONEKEY
+
+	  DB CR
+	  DB '-'
+	  DB '0'
+	  DB '.'
+	  DB BS
+	  DB '7'
+	  DB '8'
+	  DB '9'
+	  DB 'R'
+	  DB '4'
+	  DB '5'
+	  DB '6'
+	  DB 'P'
+	  DB '1'
+	  DB '2'
+	  DB '3'
+
+	  ELSE          ;NOT PHONEKEY
+
+	  DB CR
+	  DB '-'
+	  DB '0'
+	  DB '.'
+	  DB BS
+	  DB '1'
+	  DB '2'
+	  DB '3'
+	  DB 'R'
+	  DB '4'
+	  DB '5'
+	  DB '6'
+	  DB 'P'
+	  DB '7'
+	  DB '8'
+	  DB '9'
+
+	  ENDIF         ;PHONEKEY
+
+; Wait until key is pressed or input from serial port.
+
+WAITMUX:  CALL INMUXST          ;key pressed or serial input ?
+	  JZ WAITMUX
+
+	  CALL INMUX            ;then get key from wherever...
+	  RET
+
+          IF LCDISPLAY AND LCDLONG
+
+; Multiplex output N-character string to LCD display and SIO port.
+; Provides true multiplexing of individual character output,
+; where serial transmission delay is used concurrently with LCD display.
+; HL <-- pointer to output string
+;  B <-- counter for number of chars in string
+
+OUTMUXN:  MOV A,M
+	  CALL OUTSIO           ;output char to SIO port
+	  CALL OUTLCD		;output char to LCD display
+	  INX H
+	  DJNZ OUTMUXN          ;repeat for all chars in string
+          RET
+
+; Multiplex output 3-character prompt to LCD display and SIO port.
+; (3-character string pointer already loaded in HL.)
+
+OUTMUX3:  CALL WAITLCD
+	  MVI A,LCDADDRL+D3     ;set LCD display index to 3-char position
+	  OUT LCDCNTL
+          MVI B,3
+	  CALL OUTMUXN          ;output string to SIO + LCD
+          RET
+
+; Multiplex output 5-digit string to LCD display and SIO port.
+; (16-bit integer already loaded in HL.)
+
+OUTMUX5:  PUSH H                ;save value
+	  CALL PUTNUM           ;convert number to string in display buffer
+	  LXI H,OUTDIGBF        ;re-init output digit buffer address
+	  CALL WAITLCD
+	  MVI A,LCDADDRL+D6     ;set LCD display index to 6-char position
+	  OUT LCDCNTL
+	  MVI B,6
+	  CALL OUTMUXN          ;output string to SIO + LCD
+	  CALL OUTEOLN          ;send end of line to SIO
+	  POP H                 ;restore value
+	  RET
+
+; Multiplex output 5-digit decimal string to LCD display and SIO port.
+; (16-bit fixed-point integer already loaded in HL)
+
+OUTMDX5:  PUSH H                ;save value
+	  CALL PUTDEC           ;convert decimal number to display buffer
+	  LXI H,OUTDIGBF        ;re-init output digit buffer address
+	  CALL WAITLCD
+	  MVI A,LCDADDRL+D6     ;set LCD display index to 6-char position
+	  OUT LCDCNTL
+          MVI B,6
+	  CALL OUTMUXN          ;output string to SIO + LCD
+	  CALL OUTEOLN          ;send end of line to SIO
+	  POP H                 ;restore value
+	  RET
+
+; Multiplex output 5-character text string to LED display and SIO port.
+; (pointer to 1st character already loaded in HL.)
+
+OUTMSX5:  CALL WAITLCD
+	  MVI A,LCDADDRL+D6     ;set LCD display index to 6-char position
+	  OUT LCDCNTL
+          MVI B,6
+	  CALL OUTMUXN          ;output string to SIO + LCD
+	  CALL OUTEOLN          ;send end of line to SIO
+	  RET
+
+          ELSE                  ;NOT LCDISPLAY
+
+; Output 3-character string to SIO port.
+; (3-character string pointer loaded in HL.)
+
+OUTSIO3:  MOV A,M               ;1st char
+	  CALL OUTSIO
+	  INX H
+	  MOV A,M               ;2nd char
+	  CALL OUTSIO
+	  INX H
+	  MOV A,M
+	  CALL OUTSIO           ;3rd char
+	  RET
+
+; Multiplex output 3-character prompt to LED display and SIO port.
+; (3-character string pointer loaded in HL.)
+
+OUTMUX3:  PUSH H
+	  CALL OUTLED3          ;output 3 buffered charcters to LED display
+	  POP H                 ;re-set buffer pointer
+	  CALL OUTSIO3          ;echo out 3 buffered charcters to SIO port
+	  RET
+
+; Output 5-digit string to SIO port.
+; (5-character string pointer loaded in HL.)
+; (6 characters if LCD display.)
+
+OUTSIO5:  MVI B,5+XD            ;number of bytes to transfer
+XSIO:     MOV A,M               ;transfer byte out of buffer
+	  CALL OUTSIO           ;output to SIO port
+	  INX H
+	  DJNZ XSIO             ;repeat for all bytes
+	  RET
+
+; Multiplex output 5-digit string to LED display and SIO port.
+; (16-bit integer already loaded in HL.)
+; (5-digit string assembled in LED buffer)
+
+OUTMUX5:  PUSH H                ;save value
+	  CALL OUTNUM           ;transfer 5 characters to LED display
+	  LXI H,OUTDIGBF        ;re-init output digit buffer address
+	  CALL OUTSIO5          ;echo 5 buffered characters to SIO port
+	  CALL OUTEOLN          ;send end of line
+	  POP H                 ;restore value
+	  RET
+
+; Multiplex output 5-digit decimal string to LED display and SIO port.
+; (16-bit fixed-point integer already loaded in HL)
+; (5-digit string assembled in LED buffer)
+
+OUTMDX5:  PUSH H                ;save value
+	  CALL OUTDEC           ;transfer 5 characters to LED display
+	  LXI H,OUTDIGBF        ;re-init output digit buffer address
+	  CALL OUTSIO5          ;echo 5 buffered characters to SIO port
+	  CALL OUTEOLN          ;send end of line
+	  POP H                 ;restore value
+	  RET
+
+; Multiplex output 5-character text string to LED display and SIO port.
+; (pointer to 1st character already loaded in HL.)
+
+OUTMSX5:  PUSH H                ;save pointer
+	  CALL OUTLED5          ;transfer 5 characters to LED display
+          POP H                 ;re-set pointer
+	  CALL OUTSIO5          ;echo 5 buffered characters to SIO port
+	  CALL OUTEOLN          ;send end of line
+	  RET
+
+          ENDIF                 ;LCDISPLAY
+
+; Output a carriage return to the serial port.
+
+OUTEOLN:  MVI A,CR
+	  CALL OUTSIO
+	  RET
+
+
+	  ENDM
+
+
+	  ELSE          ;NOT SERIALIO
+
+
+; Non-Multiplexed Keypad / Display Input / Output.
+
+MUXIOM    MACRO
+
+
+INMUXST:  JMP INKEYST
+INMUX:	  JMP INKEY
+WAITMUX:  JMP WAITKEY
+OUTMUX3:  JMP OUTLED3
+OUTMUX5:  PUSH H
+	  CALL OUTNUM
+	  POP H
+	  RET
+OUTMDX5:  PUSH H
+	  CALL OUTDEC
+	  POP H
+	  RET
+OUTMSX5:  JMP OUTLED5
+OUTEOLN:  RET
+
+
+	  ENDM
+
+	  ENDIF         ;SERIALIO

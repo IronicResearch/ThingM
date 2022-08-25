@@ -1,0 +1,295 @@
+; ThingM hardware library
+
+
+	  IF PROTOTYPE
+
+ROMADDR:  EQU 0000H      ;ROM code space
+RAMADDR:  EQU 8000H      ;RAM data space
+
+CTCADDR:  EQU 80H        ;CTC counters
+PIOADDR:  EQU 40H        ;PIO ports
+SIOADDR:  EQU 20H        ;SIO ports
+LEDADDR:  EQU 10H        ;LED displays
+
+          ENDIF
+
+          IF NOT PROTOTYPE
+
+ROMADDR:  EQU 0000H      ;ROM code space
+RAMADDR:  EQU 8000H      ;RAM data space
+
+CTCADDR:  EQU 1CH        ;CTC counters
+PIOADDR:  EQU 18H        ;PIO ports
+SIOADDR:  EQU 14H        ;SIO ports
+CTCXADDR: EQU 0CH        ;CTC extra counters
+PIOXADDR: EQU 08H        ;PIO extra ports
+LEDADDR:  EQU 00H        ;LED displays
+
+	  ENDIF
+
+
+; LED or LCD display assignments.
+
+	  IF LEDISPLAY
+
+LED:      EQU LEDADDR+0  ;LED output display port
+
+	  ENDIF
+
+	  IF LCDISPLAY
+
+LCD:      EQU LEDADDR+0  ;LCD output display port
+
+LCDCNTL:  EQU LEDADDR+0  ;LCD control+address register
+LCDDATA:  EQU LEDADDR+1  ;LCD data register
+
+          ENDIF
+
+
+; Z80 PIO and CTC assignements:
+
+CTC0:     EQU CTCADDR+0  ;counter/timer 0
+CTC1:     EQU CTCADDR+1  ;counter/timer 1
+CTC2:     EQU CTCADDR+2  ;counter/timer 2
+CTC3:     EQU CTCADDR+3  ;counter/timer 3
+
+PIOA:     EQU PIOADDR+0  ;PIO data port A
+PIOCNTLA: EQU PIOADDR+1  ;PIO control port A
+
+PIOB:     EQU PIOADDR+2  ;PIO data port B
+PIOCNTLB: EQU PIOADDR+3  ;PIO control port B
+
+KEYSCAN:  EQU PIOA       ;keypad scanning output
+KEYSENS:  EQU PIOA       ;keypad sensing input
+
+CONTROL:  EQU PIOB       ;control output port
+STATUS:   EQU PIOB       ;status input port
+
+MOTRCNTL: EQU PIOB       ;motor control output port
+SWITCH:   EQU PIOB       ;sensing switch input port
+
+; Extra keypad ports:
+
+	  IF DUALPORT
+
+PIOXA:    EQU PIOXADDR+0 ;PIO data port A
+PIOCNTXA: EQU PIOXADDR+1 ;PIO control port A
+
+PIOXB:    EQU PIOXADDR+2 ;PIO data port B
+PIOCNTXB: EQU PIOXADDR+3 ;PIO control port B
+
+KEYSENSX: EQU PIOXA      ;extra keypad sensing input port
+MOTRCNTX: EQU PIOXB      ;extra motor control output port
+SWITCHX:  EQU PIOXB      ;extra switch input port
+
+	  ENDIF
+
+; Extra counters:
+
+	  IF DUALCTC
+
+CTCX0:    EQU CTCXADDR+0 ;counter/timer 0
+CTCX1:    EQU CTCXADDR+1 ;counter/timer 1
+CTCX2:    EQU CTCXADDR+2 ;counter/timer 2
+CTCX3:    EQU CTCXADDR+3 ;counter/timer 3
+
+	  ENDIF
+
+
+; Prototype or production version pin-outs.
+; Dual-port ThingM-II is pin-out compatible with original ThingM.
+; Projector pin-out is identical on either port.
+; Optional aerial projector pin-out is like camera on dual-port.
+
+          IF PROTOTYPE
+
+MTRG:     EQU 7          ;motor run trigger output line
+MDIR:     EQU 6          ;motor direction output line
+MNPR:     EQU 5          ;motor enable projector
+MNCM:     EQU 3          ;motor enable camera
+
+DCUR:     EQU 4          ;display cursor enable line
+
+STRG:     EQU 2          ;switch trigger input
+SHMP:     EQU 1          ;switch home projector input
+SHMC:     EQU 0          ;switch home camera input
+
+          ELSE           ;NOT PROTOTYPE
+
+          IF DUALPORT
+
+MDIR:     EQU 6          ;motor direction output line
+MNPR:     EQU 5          ;motor enable projector
+MNCM:     EQU 4          ;motor enable camera
+MNST:     EQU 3          ;motor step pulse overide line
+
+STRP:     EQU 7          ;switch trigger projector input
+STRC:     EQU 2          ;switch trigger camera input
+STRX:     EQU 1          ;switch trigger auxiliary input
+SHMC:     EQU 0          ;switch home camera input
+
+XSTP:     EQU 7          ;motor step pulse overide line -- extra port
+XDIR:     EQU 6          ;motor direction output -- extra port
+XNLP:     EQU 5          ;motor enable low-power -- extra port
+XNDC:     EQU 4          ;motor enable DC power  -- extra port
+
+SENX:     EQU 3          ;switch sensor auxiliary input -- extra port
+SENP:     EQU 2          ;switch sensor projector input -- extra port
+SHMP:     EQU 1          ;switch home projector input -- extra port
+SHMX:     EQU 0          ;switch home auxiliary input -- extra port
+
+          ELSE           ;NOT DUALPORT
+
+MDIR:     EQU 6          ;motor direction output line
+MNPR:     EQU 5          ;motor enable projector
+MNCM:     EQU 4          ;motor enable camera
+
+DCUR:     EQU 3          ;display cursor enable line
+
+STRP:     EQU 7          ;switch trigger projector input
+STRC:     EQU 2          ;switch trigger camera input
+SHMP:     EQU 1          ;switch home projector input
+SHMC:     EQU 0          ;switch home camera input
+
+          ENDIF          ;DUALPORT
+
+          ENDIF          ;PROTOTYPE
+
+
+; Serial Interface definitions.
+
+          IF SERIALIO
+
+SIOA:     EQU SIOADDR+0  ;SIO data port A
+SIOCNTLA: EQU SIOADDR+1  ;SIO control port A
+
+SIOB:     EQU SIOADDR+2  ;SIO data port B
+SIOCNTLB: EQU SIOADDR+3  ;SIO control port B
+
+SIOCMD:   EQU SIOCNTLB   ;SIO command output port
+SIODATA:  EQU SIOB       ;SIO data input/output port
+SIOSTAT:  EQU SIOCNTLB   ;SIO status input port
+BAUDCLK:  EQU CTC2       ;SIO baud clock generator
+
+	  ENDIF
+
+
+; Microprocessor clock speed dependent constants.
+
+          IF CLK1MHZ
+
+QT01:     EQU 39         ;0.01 sec quantum time @ 1 MHz / 256
+QT01SOFT: EQU 417        ;0.01 sec quantum time @ 1 MHz / 24 T-states
+KSCALEHF: EQU 15600      ;speed scaling constant half-stepping @ 1 MHz
+LOWSPDHF: EQU 62         ;minimum low speed half-stepping @ 1 MHz
+KSCALEMS: EQU 3120       ;speed scaling constant micro-stepping @ 1 MHz
+LOWSPDMS: EQU 12         ;minimum low speed micro-stepping @ 1 MHz
+BNCETM:   EQU 500*2      ;mechanical switch debouncing time
+BAUD9600: EQU 3          ;9600 baud rate clock @ 1 MHz / 2 / 16
+
+          ENDIF
+
+          IF CLK125M
+
+QT01:     EQU 48         ;0.01 sec quantum time @ 1.2288 MHz / 256 exactly
+QT01SOFT: EQU 512        ;0.01 sec quantum time @ 1.2 MHz / 24 T-states
+KSCALEHF: EQU 19170      ;speed scaling constant half-stepping @ 1.2 MHz
+LOWSPDHF: EQU 76         ;minimum low speed half-stepping @ 1.2 MHz
+KSCALEMS: EQU 3834       ;speed scaling constant micro-stepping @ 1.2 MHz
+LOWSPDMS: EQU 15         ;minimum low speed micro-stepping @ 1.2 MHz
+BNCETM:   EQU 620*2      ;mechanical switch debouncing time
+BAUD9600: EQU 4          ;9600 baud rate clock @ 1.2 MHz / 2 / 16 exactly
+
+          ENDIF
+
+          IF CLK180M
+
+QT01:     EQU 72         ;0.01 sec quantum time @ 1.8432 MHz / 256 exactly
+QT01SOFT: EQU 768        ;0.01 sec quantum time @ 1.8 MHz / 24 T-states
+KSCALEHF: EQU 28080      ;speed scaling constant half-stepping @ 1.8 MHz
+LOWSPDHF: EQU 111        ;minimum low speed half-stepping @ 1.8 MHz
+KSCALEMS: EQU 5616       ;speed scaling constant micro-stepping @ 1.8 MHz
+LOWSPDMS: EQU 22         ;minimum low speed micro-stepping @ 1.8 MHz
+BNCETM:   EQU 900*2      ;mechanical switch debouncing time
+BAUD9600: EQU 6          ;9600 baud rate clock @ 1.8 MHz / 2 / 16 exactly
+
+          ENDIF
+
+          IF CLK2MHZ
+
+QT01:     EQU 78         ;0.01 sec quantum time @ 2 MHz / 256
+QT01SOFT: EQU 833        ;0.01 sec quantum time @ 2 MHz / 24 T-states
+KSCALEHF: EQU 31200      ;speed scaling constant half-stepping @ 2 MHz
+LOWSPDHF: EQU 123        ;minimum low speed half-stepping @ 2 MHz
+KSCALEMS: EQU 6240       ;speed scaling constant micro-stepping @ 2 MHz
+LOWSPDMS: EQU 24         ;minimum low speed micro-stepping @ 2 MHz
+BNCETM:   EQU 1000*2     ;mechanical switch debouncing time
+BAUD9600: EQU 7          ;9600 baud rate clock @ 2 MHz / 2 / 16
+
+          ENDIF
+
+          IF CLK250M
+
+QT01:     EQU 96         ;0.01 sec quantum time @ 2.4576 MHz / 256 exactly
+QT01SOFT: EQU 1024       ;0.01 sec quantum time @ 2.4 MHz / 24 T-states
+KSCALEHF: EQU 38339      ;speed scaling constant half-stepping @ 2.4 MHz
+LOWSPDHF: EQU 151        ;minimum low speed half-stepping @ 2.4 MHz
+KSCALEMS: EQU 7668       ;speed scaling constant micro-stepping @ 2.4 MHz
+LOWSPDMS: EQU 29         ;minimum low speed micro-stepping @ 2.4 MHz
+BNCETM:   EQU 1230*2     ;mechanical switch debouncing time
+BAUD9600: EQU 8          ;9600 baud rate clock @ 2.4 MHz / 2 / 16 exactly
+
+          ENDIF
+
+          IF CLK360M
+
+QT01:     EQU 144        ;0.01 sec quantum time @ 3.6864 MHz / 256 exactly
+QT01SOFT: EQU 1536       ;0.01 sec quantum time @ 3.6 MHz / 24 T-states
+KSCALEHF: EQU 56160      ;speed scaling constant half-stepping @ 3.6 MHz
+LOWSPDHF: EQU 221        ;minimum low speed half-stepping @ 3.6 MHz
+KSCALEMS: EQU 11232      ;speed scaling constant micro-stepping @ 3.6 MHz
+LOWSPDMS: EQU 44         ;minimum low speed micro-stepping @ 3.6 MHz
+BNCETM:   EQU 1800*2     ;mechanical switch debouncing time
+BAUD9600: EQU 12         ;9600 baud rate clock @ 3.6 MHz / 2 / 16 exactly
+
+          ENDIF
+
+          IF CLK4MHZ
+
+QT01:     EQU 156        ;0.01 sec quantum time @ 4 MHz / 256
+QT01SOFT: EQU 1667       ;0.01 sec quantum time @ 4 MHz / 24 T-states
+KSCALEHF: EQU 62400      ;speed scaling constant half-stepping @ 4 MHz
+LOWSPDHF: EQU 245        ;minimum low speed half-stepping @ 4 MHz
+KSCALEMS: EQU 12480      ;speed scaling constant micro-stepping @ 4 MHz
+LOWSPDMS: EQU 49         ;minimum low speed micro-stepping @ 4 MHz
+BNCETM:   EQU 2000*2     ;mechanical switch debouncing time
+BAUD9600: EQU 13         ;9600 baud rate clock @ 4 MHz / 2 / 16
+
+          ENDIF
+
+	  IF CLK6MHZ
+
+QT01:     EQU 234        ;0.01 sec quantum time @ 6 MHz / 256
+QT01SOFT: EQU 2500       ;0.01 sec quantum time @ 6 MHz / 24 T-states
+KSCALEHF: EQU 46800      ;1/2 speed scaling constant half-stepping @ 6 MHz
+LOWSPDHF: EQU 369        ;minimum low speed half-stepping @ 6 MHz
+KSCALEMS: EQU 18720      ;speed scaling constant micro-stepping @ 6 MHz
+LOWSPDMS: EQU 74         ;minimum low speed micro-stepping @ 6 MHz
+BNCETM:   EQU 3000*2     ;mechanical switch debouncing time
+BAUD9600: EQU 20         ;9600 baud rate clock @ 6 MHz / 2 / 16
+
+          ENDIF
+
+          IF CLK8MHZ
+
+QT01:     EQU 312        ;0.01 sec quantum time @ 8 MHz / 256
+QT01SOFT: EQU 3333       ;0.01 sec quantum time @ 8 MHz / 24 T-states
+KSCALEHF: EQU 62400      ;1/2 speed scaling constant half-stepping @ 8 MHz
+LOWSPDHF: EQU 492        ;minimum low speed half-stepping @ 8 MHz
+KSCALEMS: EQU 24960      ;speed scaling constant micro-stepping @ 8 MHz
+LOWSPDMS: EQU 98         ;minimum low speed micro-stepping @ 8 MHz
+BNCETM:   EQU 4000*2     ;mechanical switch debouncing time
+BAUD9600: EQU 26         ;9600 baud rate clock @ 8 MHz / 2 / 16
+
+	  ENDIF
+

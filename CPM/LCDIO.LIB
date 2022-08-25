@@ -1,0 +1,281 @@
+; LCD Interface routines:
+
+; OUTLCD3:	outputs 3-character prompt string to LCD
+; OUTLCD5:	outputs 5-character digit string to LCD
+; OUTLCDN:	outputs N-character string to LCD
+; BLANKLCD:	outputs all blanks to LCD
+; WAITLCD:	waits for LCD interface ready
+; OUTLCD:	outputs character to LCD interface
+; RESETLCD:	resets LCD module
+
+
+LCDIOM    MACRO
+
+
+; LCD buffered output routines.
+
+	  IF LCDISPLAY
+
+; Output 3-character prompts in left-hand display.
+; input HL <-- pointer to 3-character string
+
+          IF LCDLONG
+
+OUTLCD3:  MVI B,3               ;3 characters
+          MVI C,D3              ;at data prompt position index
+	  CALL OUTLCDN
+          RET
+
+          ELSE
+
+; Output 3-character prompts in left-hand display.
+; Adjust 2 positions from left edge of display for centering text.
+
+OUTLCD3:  CALL WAITLCD
+	  MVI A,LCDADDRL+2      ;set left-hand display address
+	  OUT LCDCNTL
+	  MVI B,3               ;count 3 characters for output
+XFEROUT3: MOV A,M               ;load from memory
+	  CALL OUTLCD           ;output to LCD
+	  INX H
+	  DJNZ XFEROUT3
+	  RET
+
+          ENDIF                 ;LCDLONG
+
+; Output 5-character data in right-hand display.
+; input HL <-- pointer to 6-character string
+
+          IF LCDLONG
+
+OUTLCD5:  MVI B,6               ;6 digits
+          MVI C,D6              ;at data position index
+	  CALL OUTLCDN
+          RET
+
+          ELSE
+
+; Output 5-character data in right-hand display.
+; Output total of 6 characters for centering text from right edge of display.
+
+OUTLCD5:  CALL WAITLCD
+	  MVI A,LCDADDRR        ;set right-hand display address
+	  OUT LCDCNTL
+	  MVI B,6               ;count 6 characters for output
+XFEROUT5: MOV A,M               ;load from memory
+	  CALL OUTLCD           ;output to LCD
+	  INX H
+	  DJNZ XFEROUT5
+	  RET
+
+          ENDIF                 ;LCDLONG
+
+; Blank out all LCD display positions.
+
+	  IF LCDLONG
+
+BLANKLCD: CALL WAITLCD
+          MVI A,LCDADDRL        ;set left-hand display address
+          OUT LCDCNTL
+          MVI B,40              ;blank all 40 positions
+BLANKL:   MVI A,' '
+	  CALL OUTLCD
+          DJNZ BLANKL
+
+          IF LCD2ROW
+
+BLANKR2:  CALL WAITLCD
+	  MVI A,LCDADDR2        ;set 2nd-row display address
+	  OUT LCDCNTL
+	  MVI B,40              ;blank all 40 positions
+BLANKR:   MVI A,' '
+	  CALL OUTLCD
+	  DJNZ BLANKR
+
+	  ENDIF                 ;LCD2ROW
+
+          RET
+
+          ELSE                  ;NOT LCDLONG
+
+; Blank out all LCD display positions.
+
+BLANKLCD: CALL WAITLCD
+	  MVI A,LCDADDRL        ;set left-hand display address
+	  OUT LCDCNTL
+	  MVI B,8               ;all 8 left blanks
+BLANKL:   MVI A,' '
+	  CALL OUTLCD
+	  DJNZ BLANKL
+
+	  CALL WAITLCD
+	  MVI A,LCDADDRR        ;set right-hand display address
+	  OUT LCDCNTL
+	  MVI B,8               ;all 8 right blanks
+BLANKR:   MVI A,' '
+	  CALL OUTLCD
+	  DJNZ BLANKR
+	  RET
+
+	  ENDIF                 ;LCDLONG
+
+; Output n-character string to LCD display.
+; HL <-- pointer to string of characters.
+; B  <-- count for number of characters.
+; C  <-- index for offset from 1st display position.
+
+	  IF LCDLONG
+
+OUTLCDN:  CALL WAITLCD
+	  MVI A,LCDADDRL        ;set left-hand display address
+	  ADD C			;add offset to initial address
+	  OUT LCDCNTL
+XFEROUTN: MOV A,M               ;load from memory
+	  CALL OUTLCD           ;output to LCD
+	  INX H                 ;update string pointer
+	  DJNZ XFEROUTN		;repeat for B characters
+	  RET
+
+	  ELSE
+
+OUTLCDN:  CALL OUTLCD3
+	  CALL OUTLCD5
+	  RET
+
+	  ENDIF                 ;LCDLONG
+
+; Output n-character help message string to 2nd row LCD display.
+; End of message is padded with blanks for efficient overwriting.
+; Option for concatenating message strings by re-entry @XFERMSG.
+; HL <-- pointer to string of characters.
+; B  <-- count for number of characters (XFERMSG).
+
+	  IF LCD2ROW
+
+OUTMSG:   CALL WAITLCD
+	  MVI A,LCDADDR2+C3     ;set 2nd row display address
+	  OUT LCDCNTL
+	  MVI B,A3-C3-1         ;init total number of chars for message
+
+XFERMSG:  MOV A,M               ;load from memory
+	  CPI ';'               ;non-displayable termination character ?
+	  JZ PADMSG
+	  CPI '_'               ;non-displayable continuation character ?
+	  JZ CATMSG
+	  CALL OUTLCD           ;output to LCD
+	  INX H                 ;update string pointer
+	  DCR B                 ;update char counter
+	  RZ                    ;filled up already ?
+	  CPI ':'
+	  JNZ XFERMSG           ;repeat until last character
+
+PADMSG:   MVI A,' '             ;pad rest of message with blanks
+	  CALL OUTLCD
+	  DJNZ PADMSG
+	  RET
+
+CATMSG:   MVI A,' '             ;substitute blank and continue @XFERMSG
+	  CALL OUTLCD
+	  RET
+
+	  ENDIF                 ;LCD2ROW
+
+	  ENDIF                 ;LCDISPLAY
+
+
+; LCD input / output routines.
+
+          IF LCDISPLAY
+
+LCDADDRL: EQU 80H+00H           ;LCD buffer address for left-hand display
+
+	  IF LCDLONG
+LCDADDRR: EQU 80H+08H           ;LCD buffer address for right-hand display
+	  ELSE
+LCDADDRR: EQU 80H+40H           ;LCD buffer address for right-hand display
+	  ENDIF
+
+          IF LCD2ROW
+LCDADDR2: EQU 80H+40H           ;LCD buffer address for 2nd row
+          ENDIF
+
+; Wait until LCD status indicates Not-Busy.
+; Write-only LCD modules use time delay inbetween data transfers.
+
+          IF LCDREAD            ;LCD module has read/write interface
+
+WAITLCD:  IN LCDCNTL            ;input LCD status register
+          BIT 7,A               ;busy flag ?
+          JNZ WAITLCD           ;wait until not busy
+          RET
+
+          ELSE                  ;LCD module has write-only interface
+
+WAITLCD:  LXI D,QT01SOFT/10     ;wait 120 micro seconds minimum
+          CALL WAITX
+          RET
+
+          ENDIF                 ;LCDREAD
+
+; Output character to LCD.
+; Address of next character position is automatically incremented.
+
+OUTLCD:   PUSH PSW
+          CALL WAITLCD          ;wait until not busy
+          POP PSW
+          OUT LCDDATA           ;output data character
+          RET
+
+; Software reset of LCD display.
+
+RESETLCD: LXI H,15              ;wait 15 msec after hardware reset
+WTLCDFN1: LXI D,QT01SOFT
+          CALL WAITX
+          DCX H
+          MOV A,H
+          ORA L
+          JNZ WTLCDFN1
+          MVI A,00110000B       ;function set for software reset
+          OUT LCDCNTL
+
+          LXI H,5               ;wait 4.1 msec more
+WTLCDFN2: LXI D,QT01SOFT
+          CALL WAITX
+          DCX H
+          MOV A,H
+	  ORA L
+	  JNZ WTLCDFN2
+	  MVI A,00110000B       ;function set again
+	  OUT LCDCNTL
+
+	  LXI D,100             ;wait 100 usec more
+	  CALL WAITX
+	  MVI A,00110000B       ;function set again
+	  OUT LCDCNTL
+
+	  CALL WAITLCD
+	  MVI A,00111000B       ;function set for dual-line display
+	  OUT LCDCNTL
+
+	  CALL WAITLCD
+	  MVI A,00001000B       ;display off
+	  OUT LCDCNTL
+
+	  CALL WAITLCD
+	  MVI A,00000001B       ;display clear
+	  OUT LCDCNTL
+
+	  CALL WAITLCD
+	  MVI A,00000110B       ;entry mode set
+	  OUT LCDCNTL
+
+	  CALL WAITLCD
+	  MVI A,00001100B       ;display on
+	  OUT LCDCNTL
+	  RET
+
+	  ENDIF                 ;LCDISPLAY
+
+
+	  ENDM
+

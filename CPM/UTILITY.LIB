@@ -1,0 +1,115 @@
+
+; 10-21-90
+; Low-budget utility library.
+
+; Software Wait loop. 
+
+WAITXM    MACRO
+
+WAITX:    DCX D               ;decrement til 0...
+          MOV A,D
+          ORA E
+          JNZ WAITX
+          RET
+
+          ENDM
+
+; Slow Multiplication: HL <-- DE * A
+
+MULTPLYM  MACRO
+
+MULTIPLY: LXI H,0             ;init product
+          CPI 0               ;multiplier = 0 ? 
+          RZ
+
+MULTLOOP: DAD D               ;product <-- product + multiplicand
+          DCR A               ;multiplier count over ?
+          JNZ MULTLOOP
+          RET
+
+          ENDM
+
+; Slow Divison: BC <-- HL / DE
+
+DIVIDEM   MACRO
+
+DIVIDE:   LXI B,0             ;init quotient
+          MOV A,D             ;divide by 0 ?
+          ORA E
+          RZ
+
+          XRA A
+DIVDLOOP: DSBC DE             ;dividend <-- dividend - divisor
+          INX B               ;otherwise update quotient count
+          JNC DIVDLOOP        ;any more dividend ?
+
+          DAD D               ;adjust remainder for underflow
+          DCX B               ;adjust quotient count too
+          RET
+
+; Post-division rounding.
+
+ROUND:    SRLR D              ;halve divisor
+          RARR E
+          ORA A
+          DSBC DE             ;compare remainder > divisor / 2
+          RC
+          INX B               ;update quotient count
+          RET
+
+          ENDM
+
+; Fast Division: DE <-- HL / BC
+
+FASTDIVM  MACRO
+
+; Pre-division 16-bit to 15-bit scaling.
+
+PREDIVD:  BIT 7,H             ;16 bit ?
+          JNZ DIVD1
+          BIT 7,B             ;16 bit ?
+          JNZ DIVD1
+          RET
+
+DIVD1:    SRLR H              ;scale down by half
+          RARR L
+          SRLR B              ;ditto
+          RARR C
+          RET
+
+; Fast Division.
+
+FASTDIVD: MOV A,B             ;divide by 0 ? 
+          ORA C
+          STC
+          RZ
+
+          LXI D,0             ;pre-0 quotient
+          XRA A
+DIVD2:    DSBC BC             ;how many bits to do ?
+          DAD B
+          JC DIVD3
+          INR A               ;update bit counter
+          SLAR C
+          RALR B
+          JMP DIVD2
+
+DIVD3:    ORA A               ;0 bits ?
+          RZ
+
+DIVD4:    DAD H               ;scale up dividend
+          XCHG
+          DAD H               ;and quotient
+          XCHG
+          DSBC BC             ;subtract bit by bit
+          JC DIVD5
+          INX D               ;log subtraction in quotient count
+          JMP DIVD6
+DIVD5:    DAD B
+DIVD6:    DCR A               ;repeat for all bits
+          JNZ DIVD4
+
+          ORA A
+          RET
+
+          ENDM

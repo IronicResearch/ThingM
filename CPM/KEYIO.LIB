@@ -1,0 +1,816 @@
+; Keypad Interface routines:
+
+; GETNUM:	gets new number from keypad
+; MODNUM:	modifies existing number via keypad
+; PUTNUM:       puts number into output display buffer
+; OUTNUM:	outputs number to display
+; GETDEC:	gets decimal number
+; MODDEC:	modifies decimal number
+; PUTDEC:       puts decimal number into output display buffer
+; OUTDEC:	outputs decimal number
+; INKEY:	inputs key from keypad
+; INKEYST:	detects keypad status
+; WAITKEY:	waits for key pressed
+; OUTLED:	outputs digit string to display
+
+
+; Keypad input and LED output display routines.
+; 16 keys represented in order of appearance
+; on 4-row by 4-column keypad XY matrix.
+
+; Telephone style keypad layout:
+
+;    < PRGRM >      <  ONE  > <  TWO  > < THREE >
+;    <  RUN  >      <  FOUR > <  FIVE > <  SIX  >
+;    < CLEAR >      < SEVEN > < EIGHT > < NINE  >
+;    < ENTER >      < MINUS > <  ZERO > < POINT >
+
+          IF PHONEKEY
+
+ZERO:     EQU 13
+ONE:      EQU 2
+TWO:      EQU 1
+THREE:    EQU 0
+FOUR:     EQU 6
+FIVE:     EQU 5
+SIX:      EQU 4
+SEVEN:    EQU 10
+EIGHT:    EQU 9
+NINE:     EQU 8
+
+POINT:    EQU 12
+MINUS:    EQU 14
+
+ENTER:    EQU 15
+CLEAR:    EQU 11
+
+PROGRAM:  EQU 3
+RUN:      EQU 7
+
+	  ELSE          ;NOT PHONEKEY
+
+; Calculator style keypad layout:
+
+;    < PRGRM >      < SEVEN > < EIGHT > <  NINE >
+;    <  RUN  >      <  FOUR > <  FIVE > <  SIX  >
+;    < CLEAR >      <  ONE  > <  TWO  > < THREE >
+;    < ENTER >      < MINUS > <  ZERO > < POINT >
+
+ZERO:     EQU 13
+ONE:      EQU 10
+TWO:      EQU 9
+THREE:    EQU 8
+FOUR:     EQU 6
+FIVE:     EQU 5
+SIX:      EQU 4
+SEVEN:    EQU 2
+EIGHT:    EQU 1
+NINE:     EQU 0
+
+POINT:    EQU 12
+MINUS:    EQU 14
+
+ENTER:    EQU 15
+CLEAR:    EQU 11
+
+PROGRAM:  EQU 3
+RUN:      EQU 7
+
+          ENDIF         ;PHONEKEY
+
+; Extended function keypad layout:
+
+;    <  XONE  > <  XTWO  > < XTHREE > < XFOUR  >
+;    <  XFIVE > <  XSIX  > < XSEVEN > < XEIGHT >
+
+	  IF KEYLONG
+
+XONE:     EQU 16+8+3
+XTWO:     EQU 16+8+2
+XTHREE:   EQU 16+8+1
+XFOUR:    EQU 16+8+0
+XFIVE:    EQU 16+8+7
+XSIX:     EQU 16+8+6
+XSEVEN:   EQU 16+8+5
+XEIGHT:   EQU 16+8+4
+
+	  ENDIF         ;KEYLONG
+
+
+; KEYIO Equates moved out of macro definition to save space.
+
+EOS:      EQU 0FFH       ;end-of-string marker
+
+DECPT:    EQU 10         ;quasi-BCD 'decimal point' code
+NEGSN:    EQU 11         ;quasi-BCD 'negative sign' code
+
+ROWSCAN:  EQU 11101110B  ;keypad output row scanning pattern
+
+ROWMASK:  EQU 11110000B  ;keypad row output port mask
+COLMASK:  EQU 00001111B  ;keypad column input port mask
+
+NONEGNUM: SET FALSE	 ;option for no negative numbers
+
+; SIOCODE table moved out of KEYIOM macro definition to save space.
+
+
+
+
+KEYIOM	  MACRO
+
+
+; Generally useful data input/output routines:
+; GETNUM gets a number from the keypad, displays it, and converts it to hex.
+; OUTNUM gets a hex value from memory, and displays it.
+; MODNUM gets a previous value from memory, displays it, and waits for
+; possible modification from the keypad.
+; GETDEC, OUTDEC, and MODDEC do the same thing for decimal numbers.
+; Numbers are passed via register HL.
+; PUTNUM, PUTDEC are atomized from OUTNUM, OUTDEC in case no display wanted.
+
+GETNUM:   CALL INPUTNUM  ;input number only
+          CALL CONVERT
+          LHLD CONVACCM
+          RET
+
+PUTNUM:   CALL RECONVRT  ;prepare number for output only
+          CALL XFERDSPL
+          CALL PUTDISPL
+          RET
+
+OUTNUM:   CALL PUTNUM    ;output number only
+	  CALL OUTLED
+          RET
+
+MODNUM:   PUSH H         ;buffer old number
+          CALL RECONVRT
+          CALL XFERDSPL
+          CALL OUTDISPL
+          CALL CURSRON
+          CALL MODFYNUM  ;modify number
+          CALL CONVERT
+          CALL CURSROFF
+	  LHLD CONVACCM  ;return new number
+          POP D
+          LDA KEYBUF     ;forget it ?
+	  CPI PROGRAM
+          RNZ
+          XCHG           ;restore old number
+          RET
+
+GETDEC:   CALL INPUTNUM  ;input decimal number
+          CALL CONVERT
+          CALL CONVDEC
+          LHLD CONVACCM
+          RET
+
+PUTDEC:   CALL RECONVRT  ;prepare decimal number for output
+	  CALL RECONDEC
+          CALL XFERDSPL
+          CALL PUTDISPL
+          RET
+
+OUTDEC:   CALL PUTDEC    ;output decimal number
+          CALL OUTLED
+          RET
+
+MODDEC:   PUSH H         ;modify decimal number
+          CALL RECONVRT
+          CALL RECONDEC
+          CALL XFERDSPL
+          CALL OUTDISPL
+          CALL CURSRON
+          CALL MODFYNUM
+          CALL CONVERT
+          CALL CONVDEC
+          CALL CURSROFF
+	  LHLD CONVACCM
+          POP D
+          LDA KEYBUF
+          CPI PROGRAM
+          RNZ
+          XCHG
+          RET
+
+; Data number input routine INPUTNUM
+; Numeral digits are input into buffer INDIGBUF until the ENTER key
+; is pressed. CLEAR key zeroes out the buffer and re-starts the routine.
+; Each digit entry is echoed out to the display via routine OUTDISPL.
+; Re-adjust LCD cursor position after each Output-Display call. 
+; Input is multiplexed from either keypad or serial port.
+
+INPUTNUM: MVI A,0        ;zero out the input buffer
+          STA INDIGBUF
+          MVI A,EOS
+          STA INDIGBUF+1
+          CALL OUTDISPL  ;and display
+          CALL CURSRADJ  ;with adjusted cursor
+
+MODFYNUM: LXI H,INDIGBUF ;initialize input digit buffer pointer
+          SHLD DIGPNTR
+
+INNUM:    CALL INMUX     ;get a key, any key..., from KEY or SIO ports
+          JNC INNUM
+
+	  LDA KEYBUF
+          CPI PROGRAM    ;PROGRAM ?
+          JZ ENTERIN
+
+          CPI ENTER      ;ENTER ?
+          JZ ENTERIN
+
+          CPI CLEAR      ;CLEAR ?
+          JZ CLEAROUT
+
+          CALL IFNUM     ;number at all ?
+          JZ ECHOUT
+          JMP INNUM
+
+ECHOUT:   LHLD DIGPNTR
+	  MOV M,A        ;transfer digit into input buffer
+          INX H
+          MVI M,EOS      ;append end-of-string marker
+          SHLD DIGPNTR
+          CALL OUTDISPL  ;echo output current digit string
+          CALL CURSRADJ  ;with adjusted cursor
+          JMP INNUM
+
+CLEAROUT: MVI A,0        ;zero out current data entry
+          STA INDIGBUF
+          MVI A,EOS
+          STA INDIGBUF+1
+          CALL OUTDISPL  ;display 0
+	  CALL CURSRADJ  ;with adjusted cursor
+          LXI H,INDIGBUF ;and start again...
+          SHLD DIGPNTR
+          JMP INNUM
+          
+ENTERIN:  RET
+
+; IFNUM checks the keypad input code for valid numerals 0 to 9. If matched,
+; it additionally replaces the code with the corresponding BCD value.
+; Includes additional decoding for decimal point and negative sign.
+
+IFNUM:    LXI H,NUMCODE
+          LXI B,12
+          CCIR           ;search numeral code table for match
+	  RNZ
+
+          MOV A,C        ;if match, then substitute actual value
+          RET
+
+; Look-up table for keypad number codes.
+; (Codes are in descending order to match BC count of CCIR instruction.)
+
+NUMCODE:  DB MINUS
+          DB POINT
+          DB NINE
+          DB EIGHT
+          DB SEVEN
+          DB SIX
+          DB FIVE
+	  DB FOUR
+          DB THREE
+          DB TWO
+          DB ONE
+          DB ZERO
+
+; Keypad input scanning routine.
+; X rows energized one at a time (4 bits).
+; Y columns sensed in one group of four (4 bits).
+; Carry flag set if key pressed and decoded.
+
+KEYCODE:  DB  11101110B  ;keypad row/column code de-mulitplexing table
+          DB  11101101B
+          DB  11101011B
+          DB  11100111B
+          DB  11011110B  ;row #2
+          DB  11011101B
+          DB  11011011B
+          DB  11010111B
+          DB  10111110B  ;row #3
+          DB  10111101B
+          DB  10111011B
+          DB  10110111B
+          DB  01111110B  ;row #4
+          DB  01111101B
+          DB  01111011B
+          DB  01110111B
+
+; Wait until key is pressed.
+
+WAITKEY:  CALL INKEYST        ;key pressed ?
+          JZ WAITKEY
+
+          CALL INKEY          ;then get key
+          RET
+
+; Check for key press at all.
+; Return with Non-Zero flag if key pressed.
+
+INKEYST:  MVI A,00000000B     ;output energize all rows
+          OUT KEYSCAN
+          NOP
+          IN KEYSENS          ;input sense all columns
+          ANI COLMASK
+          XRI COLMASK         ;any key pressed ?
+
+          IF KEYLONG
+
+          RNZ
+          IN KEYSENSX         ;input sense all columns
+          ANI COLMASK
+          XRI COLMASK         ;any key pressed ?
+
+          ENDIF               ;KEYLONG
+
+          RET
+
+; Check for key press, then Input key if pressed.
+; Return with Carry flag if key input successful.
+
+          IF KEYLONG     ;if extended keypad
+
+INKEY:    CALL INKEY1    ;check column group #1
+          RC
+          CALL INKEY2    ;check column group #2
+          RET
+
+          ELSE           ;NOT KEYLONG
+
+INKEY:    CALL INKEY1    ;check column group #1
+          RET
+
+          ENDIF          ;KEYLONG
+
+; Input key for group #1.
+
+INKEY1:   MVI B,ROWSCAN  ;set row scanning pattern
+	  MVI A,ROWSCAN
+
+SCAN1:    ANI ROWMASK
+          OUT KEYSCAN    ;energize...
+          NOP
+          IN KEYSENS     ;sense...
+          ANI COLMASK
+          XRI COLMASK
+          JNZ DEBNCE1    ;if key press, then debounce it
+          
+SHIFT1:   MOV A,B        ;update row scanning pattern
+          RLC
+          MOV B,A
+          RNC            ;until 4 rows completed
+          JMP SCAN1
+          
+DEBNCE1:  LXI D,BNCETM   ;wait debounce time
+          CALL WAITX
+          
+          IN KEYSENS     ;re-sense...
+          ANI COLMASK
+          MOV C,A
+          XRI COLMASK
+          JZ SHIFT1      ;noise?...
+
+          MOV A,B        ;assemble row scanning pattern
+          ANI ROWMASK
+          ORA C          ;with column sensing pattern
+
+          LXI B,16       ;search key code table for match
+          LXI H,KEYCODE
+          CCIR
+          MOV A,C
+          STA KEYBUF     ;save key code #
+
+RELEASE1: IN KEYSENS     ;wait for key release
+          ANI COLMASK
+          XRI COLMASK
+          JNZ RELEASE1
+
+          LXI D,BNCETM   ;and debounce that one too
+          CALL WAITX
+
+          STC            ;got one...
+          RET
+
+; Input key for group #2.
+
+          IF KEYLONG
+
+INKEY2:   MVI B,ROWSCAN  ;set row scanning pattern
+	  MVI A,ROWSCAN
+          
+SCAN2:    ANI ROWMASK
+          OUT KEYSCAN    ;energize...
+          NOP
+          IN KEYSENSX    ;sense...
+          ANI COLMASK
+          XRI COLMASK
+          JNZ DEBNCE2    ;if key press, then debounce it
+
+SHIFT2:   MOV A,B        ;update row scanning pattern
+          RLC
+          MOV B,A
+          RNC            ;until 4 rows completed
+          JMP SCAN2
+
+DEBNCE2:  LXI D,BNCETM   ;wait debounce time
+          CALL WAITX
+
+          IN KEYSENSX    ;re-sense...
+          ANI COLMASK
+          MOV C,A
+          XRI COLMASK
+          JZ SHIFT2      ;noise?...
+
+          MOV A,B        ;assemble row scanning pattern
+          ANI ROWMASK
+          ORA C          ;with column sensing pattern
+
+          LXI B,16       ;search key code table for match
+          LXI H,KEYCODE
+          CCIR
+          MOV A,C
+          ADI 16         ;to distinguish extended key codes
+          STA KEYBUF     ;save key code #
+          
+RELEASE2: IN KEYSENSX    ;wait for key release
+          ANI COLMASK
+          XRI COLMASK
+          JNZ RELEASE2
+
+          LXI D,BNCETM   ;and debounce that one too
+          CALL WAITX
+
+          STC            ;got one...
+          RET
+
+          ENDIF          ;KEYLONG
+
+; Input key with quick scanning.
+; No wait for debounce and no wait for release.
+
+INKEYQ:   MVI B,ROWSCAN  ;set row scanning pattern
+          MVI A,ROWSCAN
+          
+SCANQ:    ANI ROWMASK
+          OUT KEYSCAN    ;energize...
+          NOP
+          IN KEYSENS     ;sense...
+          ANI COLMASK
+          MOV C,A        ;save actual sensing input
+          XRI COLMASK
+          JNZ DECODEQ    ;if key press, then decode it
+          
+SHIFTQ:   MOV A,B        ;update row scanning pattern
+          RLC
+          MOV B,A
+          RNC            ;until 4 rows completed
+          JMP SCANQ
+          
+DECODEQ:  MOV A,B        ;assemble row scanning pattern
+          ANI ROWMASK
+          ORA C          ;with column sensing pattern
+
+          LXI B,16       ;search key code table for match
+          LXI H,KEYCODE
+          CCIR
+          MOV A,C
+          STA KEYBUF     ;save key code #
+
+          STC            ;got one...
+          RET
+
+; CONVERT takes the numeral digit string assembled in the input buffer,
+; and converts it into the corresponding 16-bit binary number it represents.
+; A fractional portion is denoted by the number of decimal places logged
+; in FRACTION, for subsequent conversion processing.
+; Number is returned in register HL.
+
+CONVERT:  LXI B,INDIGBUF ;initialize input digit buffer pointer
+          LXI D,0        ;initialize whole & fractional digit counters
+
+          XRA A          ;assume positive number
+	  STA NEGSTAT
+                    
+CNTWHOLE: LDAX B         ;count each whole digit
+          INX B
+	  CPI NEGSN      ;...except negative sign
+	  JZ NEGCNT
+          CPI DECPT      ;...unless decimal point
+          JZ CNTFRACT
+          CPI EOS        ;...or until end of string
+          JZ STOPCNT
+          INR D
+          JMP CNTWHOLE
+
+NEGCNT:   IF NOT NONEGNUM
+
+	  MVI A,0FFH     ;flag negative number
+	  STA NEGSTAT
+
+	  ENDIF
+
+	  JMP CNTWHOLE
+          
+CNTFRACT: LDAX B         ;continue counting each fractional digit
+          INX B
+          CPI DECPT      ;...(except more decimal points)
+          JZ CNTFRACT
+          CPI EOS        ;...until end of string
+          JZ STOPCNT
+          INR E
+          JMP CNTFRACT
+
+STOPCNT:  MOV A,E        ;get fractional count
+          STA FRACTION
+          ADD D          ;with whole number count
+          STA CONVCNTR   ;for total digit count
+          
+          DCX B          ;adjust pointer before end-of-string
+          DCX B
+          LXI H,1        ;initialize decimal weight
+	  SHLD DECWT
+          DCX H          ;initialize conversion accumulator value
+          SHLD CONVACCM
+          
+NUMST:    LDAX B         ;fetch digit onto Number Street
+          DCX B
+          CPI DECPT      ;(except for decimal point)
+          JZ NUMST
+	  CPI NEGSN      ;(or negative sign)
+          JZ NUMST
+
+          LDED DECWT
+          CALL MULTIPLY  ;mulitply by decimal weight
+          XCHG
+          LHLD CONVACCM
+          DAD D          ;and add to accumulated value
+          SHLD CONVACCM  ;(just like on Number St.)
+
+          LDA CONVCNTR   ;more digits to pick up ?
+          DCR A
+          STA CONVCNTR
+          JZ STOPCONV
+
+          MVI A,10       ;adjust decimal weight multiplier for next house
+          LDED DECWT
+          CALL MULTIPLY
+          SHLD DECWT     ;weight <-- weight * 10
+          JMP NUMST
+          
+STOPCONV: LDA NEGSTAT    ;negative value ?
+	  ORA A
+	  RZ
+
+	  IF NOT NONEGNUM
+
+	  LHLD CONVACCM
+	  LXI D,0        ;then 2's complement negative
+	  XCHG
+	  XRA A
+	  DSBC DE        ;... = 0 - number
+	  SHLD CONVACCM
+
+	  ENDIF
+
+	  RET
+
+; CONVDEC further converts a number into its decimal equivalent
+; according to its number of decimal places.
+; Assume 2 decimal places.
+
+CONVDEC:  LDA FRACTION   ;number of decimal places =
+          CPI 2          ;... 2 --> OK
+          RZ
+          JM SCALEUP     ;... 1 or less --> scale up by 10
+
+          LHLD CONVACCM  ;... 3 or more --> scale down by 10
+          LXI D,10
+          CALL DIVIDE
+          CALL ROUND
+          SBCD CONVACCM
+          RET
+
+SCALEUP:  CPI 0          ;... 0 --> scale up max by 100
+          JZ SCALEMAX
+
+          LDED CONVACCM  ;... 1 --> scale up by 10
+          MVI A,10
+          CALL MULTIPLY
+          SHLD CONVACCM
+          RET
+
+SCALEMAX: LDED CONVACCM
+          MVI A,100
+          CALL MULTIPLY
+          SHLD CONVACCM
+          RET
+
+; RECONVERT takes a 16-bit value from memory and reconverts the number
+; into its BCD digit string representation to be subsequently output.
+; Number passed via register HL.
+; Assume 5 BCD digits max for 64k.
+; Assume 2's-complement for +/-32k.
+
+RECONVRT: XRA A               ;pre-flag positive
+	  STA NEGSTAT
+	  BIT 7,H             ;sign bit ?
+	  JZ RCONPLUS
+
+	  IF NOT NONEGNUM
+
+	  LXI D,0
+	  XCHG                ;then 2's-complement positive
+	  XRA A
+	  DSBC DE             ;... = 0 - number
+	  CMA
+	  STA NEGSTAT         ;flag negative
+
+	  ENDIF
+
+RCONPLUS: LXI D,10000         ;proceed back down Number St.
+          CALL DIVIDE
+          MOV A,C
+          STA XFERBUF         ;10000's
+
+          LXI D,1000
+          CALL DIVIDE
+          MOV A,C
+          STA XFERBUF+1       ;1000's
+
+          LXI D,100
+          CALL DIVIDE
+          MOV A,C
+          STA XFERBUF+2       ;100's
+
+          LXI D,10
+          CALL DIVIDE
+          MOV A,C
+          STA XFERBUF+3       ;10's
+          MOV A,L
+          STA XFERBUF+4       ;1's
+          MVI A,EOS
+          STA XFERBUF+5
+          STA XFERBUF+6
+          RET
+
+; RECONDEC adjusts the reconverted value to include 2 decimal places.
+; Assume 5 digits (max) in transfer buffer.
+; Decimal Point gets inserted in transfer buffer here.
+
+RECONDEC: LDA XFERBUF+4       ;relocate 2 least sig digits
+          STA XFERBUF+5
+          LDA XFERBUF+3
+          STA XFERBUF+4
+          MVI A,DECPT         ;and insert dec pt
+          STA XFERBUF+3
+          RET
+
+; XFERDSPL transfers a re-assembled BCD digit string into the LED display
+; buffer and outputs it. Leading zeros are blanked out.
+; Assume 5 BCD digits max = 4 digits to check for leading zeroes.
+; Special leading zero check for fixed decimal point at 2 LSD digits.
+; Assume 5 digits (max) + 1 dec pt (maybe) in transfer buffer.
+; Negative sign gets inserted in transfer buffer here.
+
+XFERDSPL: CALL FILLIN         ;fill in input digit string with EOS
+
+          MVI B,4             ;initialize leading 0 counter
+          LXI H,XFERBUF       ;initialize transfer digit buffer pointer
+          
+LEAD0:    MOV A,M             ;scan digit buffer for leading 0s
+          CPI 0
+          JNZ LEADP
+          INX H               ;move pointer past leading 0s
+          DJNZ LEAD0
+
+LEADP:    MOV A,M             ;unless followed by a dec pt
+          CPI DECPT
+          JNZ NON0
+          DCX H
+          INR B
+          
+NON0:     LXI D,INDIGBUF      ;initialize digit buffer pointer
+          INR B               ;adjust transfer counter
+
+          LDA XFERBUF+3       ;explicitly check for dec pt
+          CPI DECPT
+	  JNZ NEG0
+          INR B               ;adjust counter one more for dec pt
+
+NEG0:     LDA NEGSTAT         ;negative number ?
+          ORA A
+          JZ XFERNON0
+	  MVI A,NEGSN         ;insert negative sign
+          STAX D
+          INX D
+
+XFERNON0: MOV A,M             ;transfer digits
+          STAX D              ;to 'input' buffer
+          INX H
+          INX D
+          DJNZ XFERNON0
+
+          RET
+
+; FILLIN pads the input digit buffer with EOS markers.
+
+FILLIN:   MVI B,8
+          LXI H,INDIGBUF
+
+FILLNULL: MVI M,EOS           ;fill in with End-of-String
+          INX H
+          DJNZ FILLNULL
+          RET
+
+; LED Digit output routine preparation (formerly part of OUTDISPL);
+; Digits available in BCD form in input buffer;
+; Digits transferred and recoded with addresses in output buffer;
+; Assume 5-6 characters (max) to be transferred into Output buffer.
+
+PUTDISPL: CALL BLANKOUT  ;blank out the output buffer
+
+          MVI C,0        ;initialize digit counter
+          LXI D,INDIGBUF ;initialize input buffer pointer
+          LXI H,OUTDIGBF ;initialize output buffer pointer
+
+CNTDIG:   LDAX D         ;count the digits in the input buffer
+          INX D
+          CPI EOS        ;...until end of string
+          JZ ALNDIG
+          INR C
+          JMP CNTDIG
+
+ALNDIG:   MVI A,5+XD     ;align output pointer according to # of digits
+          SUB C
+          ADD L
+          MOV L,A
+
+          LXI D,INDIGBUF
+XFERDIG:  LDAX D         ;transfer digits from input to output buffers
+          MOV M,A
+          INX D
+          INX H
+          CPI EOS
+          JNZ XFERDIG
+
+          CALL XLATOUT   ;translate to ASCII
+          RET
+
+; OUTDISPL assembles OUTDIGBUF buffer for output and then displays output.
+; (Atmozied PUTDISPL subroutine for cases when display is not wanted.)
+
+OUTDISPL: CALL PUTDISPL  ;prepare OUTDIGBF buffer for output
+          CALL OUTLED    ;output to LED display
+          RET
+          
+; BLANKOUT pads the output digit buffer with blanks.
+; Assume 5-6 characters (max) in output buffer.
+
+BLANKOUT: MVI B,5+XD
+          LXI H,OUTDIGBF
+
+FILLBLNK: MVI M,' '      ;fill all locations with blanks
+          INX H
+          DJNZ FILLBLNK
+          RET
+
+; XLATOUT translates output digits in OUTDIGBF into ASCII characters. 
+; Assume 5-6 characters (max) in output buffer.
+
+XLATOUT:  LXI H,OUTDIGBF ;output buffer pointer
+          MVI B,5+XD     ;output buffer counter
+
+XLATDIG:  MOV A,M
+          CPI EOS        ;end of string ?
+          JZ XLATES
+          CPI 10         ;in 0..9 ?
+          JP XLATDP
+          ADI '0'        ;convert to ASCII
+          MOV M,A
+          JMP NEXTCHR
+
+XLATDP:   CPI DECPT      ;decimal point ?
+          JNZ XLATNS
+          MVI M,'.'      ;insert ASCII point
+          JMP NEXTCHR
+
+XLATNS:   CPI NEGSN      ;negative sign ?
+          JNZ NEXTCHR
+          MVI M,'-'      ;insert ASCII minus
+
+NEXTCHR:  INX H          ;repeat for all of output buffer
+          DJNZ XLATDIG
+
+XLATES:   MVI M,' '      ;insert ASCII blank at end of string
+          RET
+          
+; OUTLED outputs digits buffered in OUTDIGBF to the latched LED display.
+
+OUTLED:   LXI H,OUTDIGBF ;initialize output buffer address
+          CALL OUTLED5   ;output 5 buffered digits to LED display
+          RET
+
+
+	  ENDM
+

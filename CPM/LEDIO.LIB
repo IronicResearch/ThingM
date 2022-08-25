@@ -1,0 +1,152 @@
+
+; LED Interface routines:
+
+; OUTLED3:	outputs 3-character string to LED display
+; OUTLED5:	outputs 5-character string to LED display
+; BLANKLED:	outputs all blanks to LED display
+; CURSRON:	turns display cursor on
+; CURSROFF:	turns display cursor off
+; CURSRADJ:	adjusts display for cursor toggling
+
+
+; Define macro LEDIOM according to if LED or LCD display type.
+; (More efficient memory utilization for MAC macro assembler.)
+
+
+          IF LEDISPLAY
+
+LEDIOM	  MACRO
+
+
+; Output 3-character prompt to LED display.
+; (3-character string pointer loaded in HL.)
+
+OUTLED3:  MOV A,M               ;1st char
+	  OUT LED+7
+	  INX H
+	  MOV A,M               ;2nd char
+	  OUT LED+6
+	  INX H
+	  MOV A,M               ;3rd char
+	  OUT LED+5
+	  RET
+
+; Output 5-digit string to LED display.
+; (5-character string pointer loaded in HL.)
+
+XD:       EQU 0          ;extra digit = +0 for 5 buffered digits for LED
+
+OUTLED5:  MVI C,LED+4    ;initialize LED port address
+	  MVI B,5        ;number of bytes to transfer
+
+XLED:     MOV A,M        ;transfer byte out of buffer
+	  OUTP A         ;output to LED port
+	  INX H
+	  DCR C
+	  DJNZ XLED      ;repeat for all bytes
+	  RET
+
+; Blank out all LED display positions.
+
+BLANKLED: MVI C,LED+7    ;initialize LED port address
+	  MVI B,8        ;number of bytes
+
+BLANKX:   MVI A,' '      ;blank
+	  OUTP A         ;output to LED port
+	  DCR C
+	  DJNZ BLANKX    ;repeat for all bytes
+	  RET
+
+; Cursor display control routines for LED display.
+; Flashing cursor automatically on timer CTC3 interrupt.
+
+CURSRON:  DI
+	  XRA A			;init cursor flasher memory off
+	  STA CURSRMEM
+	  EXX
+	  MVI B,50
+	  EXX
+
+	  LXI H,CURSRINT	;point to cursor timer interrupt
+	  SHLD INTCTCV3
+	  MVI A,IT800LRC	;load cursor timer on CTC3
+	  OUT CTC3
+	  MVI A,QT01
+	  OUT CTC3
+	  EI
+	  RET
+
+; Turn cursor timer flasher routine off.
+
+CURSROFF: DI
+	  MVI A,NT800NRC	;reset cursor timer and interrupt
+	  OUT CTC3
+	  LXI H,NULLINT 	;point to null interrupt
+	  SHLD INTCTCV3
+	  CALL RESETLED         ;reset cursor LED display memory
+	  EI
+	  RET
+
+; Null cursor adjustment (for LCD compatibility).
+
+CURSRADJ: RET
+
+
+	  ENDM
+
+          ENDIF         ;LEDISPLAY
+
+
+
+
+; Alternatively define macro LEDIOM for LCD display type.
+
+          IF LCDISPLAY
+
+LEDIOM    MACRO
+
+XD:       EQU 1          ;extra digit = +1 for 6 buffered digits for LCD
+
+OUTLED3:  JMP OUTLCD3    ;use LCD 3-char output subroutine
+OUTLED5:  JMP OUTLCD5    ;use LCD 5-digit output subroutine
+BLANKLED: JMP BLANKLCD   ;use LCD output blanking subroutine
+
+
+; Cursor display control routines for LCD display.
+; Flashing cursor automatically inside LCD chip.
+
+          IF LCDLONG
+CURSADDR  SET LCDADDRL+D6+5     ;cursor position at end of data
+          ELSE
+CURSADDR  EQU LCDADDRR+5        ;cursor position at end of data
+          ENDIF
+
+CURSRON:  CALL WAITLCD
+	  MVI A,CURSADDR        ;select LSD digit address
+	  OUT LCDCNTL
+	  CALL WAITLCD
+	  MVI A,00001101B       ;enable character blinker on
+	  OUT LCDCNTL
+	  RET
+
+; Disable cursor timer interrupt routine, and clear the cursor.
+
+CURSROFF: CALL WAITLCD
+	  MVI A,CURSADDR        ;select LSD digit address
+	  OUT LCDCNTL
+	  CALL WAITLCD
+	  MVI A,00001100B       ;clear cursor and char blinker
+	  OUT LCDCNTL
+	  RET
+
+; Adjust LCD cursor position back to LSD digit address.
+
+CURSRADJ: CALL WAITLCD
+	  MVI A,CURSADDR        ;select LSD digit address
+          OUT LCDCNTL
+          RET
+
+
+          ENDM
+
+          ENDIF         ;LCDISPLAY

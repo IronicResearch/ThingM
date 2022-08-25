@@ -1,0 +1,842 @@
+; Combined RCOM + RKERNEL Remote Debugger Driver
+; Hacked by DaveM Penguin, Ironic Research Labs, 1995
+; Converted to MAC assembler Intel format.
+; Macro library .LIB version.
+
+
+;FALSE	EQU	0
+;TRUE	EQU	NOT FALSE
+
+;MAC	EQU	TRUE
+;M80	EQU	FALSE
+
+;	MACLIB Z80
+;	MACLIB THINGM
+
+
+LOCALSTACK	SET 	TRUE		;for local debugger stack
+
+
+ROMDBUG	SET	1D80H		;debugger code memory
+RAMDBUG	SET	9FF8H		;debugger data memory
+DBSTACK	SET	9FF0H		;debugger stack
+
+
+
+
+
+RDEBUGM MACRO
+
+
+
+
+
+; RCOM00.Z80 Remote communications module prototype
+; copyright 1986, 1987 Z-World, Davis, CA 95616
+; This is a prototype remote kernel driver for the DSD80 remote debugger.
+;
+; This module contains the parts of the remote kernel which are most likely
+; to be customized. It must be linked with the module RDRIVER in order to create
+; a complete remote kernel. A typical link might be performed as follows:
+;
+;  CPM A>SLRNK ROM/H/M,RCOM00,RKERNEL,/C:100,/D:4000
+;
+; where the code segment is typically in PROM, the data segment in RAM, and
+; ROM is the filename in which the .HEX and .SYM tables are to be written.
+;
+; The principal functions of required here are:
+;  
+;  1- Serial communications with the development system. This amounts
+;     to a simple character in and character out routine.
+;
+;  2- Initialization of the system. There must be a way to enter the 
+;     debugger kernel.
+;
+;  3- Setup of interrupt for breaking out of loops (optional).
+;
+;
+; Initialization proceedure:
+;
+;  1- Install a jump instruction to the entry: process_breakpoint from
+;     the RST vector used, for example if RST 38 is used, then at 38h the
+;     instruction jp process_breakpoint should be installed.
+;
+;  2- Jump to the entry preset to start. The entry initialize here will be
+;     called back to initialize the serial communications link.
+;
+
+;	public	read_char	; return character in A from serial comm
+;	public	write_char	; send char in A to serial comm
+;	public	initialize	; initialize serial port
+;	public	breakpoint_opcode	; definition of code
+;	public	run_begin	; enable breakout interrupt
+;	public	run_end		; disable breakout interrupt
+;	extrn	process_breakpoint	; entry from RST
+;	extrn	preset		;startup location
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;	aseg
+;	ORG	0000H
+	ORG     ROMDBUG
+
+; jump table for simple overlay patching
+
+        JMP     RSETDBUG
+        JMP     PBREAKPOINT
+        JMP     PBREAKOUT
+
+RSETDBUG:
+; logical startup
+ IF LOCALSTACK
+	LXI SP,DBSTACK	;stack?, what stack? (how ironic...)
+ ENDIF
+	JMP PRESET	;jp	preset		;startup of debug kernel
+DBMAIN	SET ($)
+
+
+; breakpoint vector
+;	ORG	0038h	;rst vector
+	ORG	0030H	;RST vector 6
+	JMP PBREAKPOINT	;jp	process_breakpoint	;
+
+;breakpoint_opcode	equ	0ffh	; rst 38h
+;BREAKOPCODE:		EQU	0FFH	; RST 7
+BREAKOPCODE:		EQU	0F7H	; RST 6
+
+
+; nmi vector for breakout (optional)
+	ORG	0066h			;nmi vector
+	JMP PBREAKOUT	;jp	Bprocess_breakout
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;	cseg
+;	ORG	ROMDBUG
+;	ORG	ROMDBUG+3
+	ORG	DBMAIN
+;
+;expand Serial IO library code macro here:
+
+;	SIOMACRO
+
+; code here to initialize serial communications, breakpoint vectors, etc.
+INITIALIZE:		;initialize:
+;
+	CALL RESETSIO
+	ret		;
+;
+; Serial Read character
+READCHAR:		;read_char:
+	PUSH H;		;push	hl		;save and restore regs shown
+	PUSH D;		;push	de
+	PUSH B;		;push	bc
+; return character in A reg
+	CALL INSIO
+	POP B;		;pop	bc
+	POP D;		;pop	de
+	POP H;		;pop	hl
+	ret
+;
+; Serial Write character
+WRITECHAR:		;write_char:
+	PUSH H;		;push	hl		;save and restore regs shown
+	PUSH D;		;push	de
+	PUSH B;		;push	bc
+; transmit character in A over serial comm
+	CALL OUTSIO
+	POP B;		;pop	bc
+	POP D;		;pop	de
+	POP H;		;pop	hl
+	ret
+;
+RUNBEGIN:		;run_begin:
+;
+; enable any hardware, etc needed to implement breakout interrupt
+;
+	ret
+;
+RUNEND:			;run_end:
+;
+; disable any hardware, etc. for breakout interrupt
+;
+	ret
+;
+
+; code here varies depending on method of breaking out.
+; here we assume that a z80 nmi interrupt is used to break code
+; out of a loop. In this case we simulate an RST instruction
+; when the NMI occurs.
+;
+PBREAKOUT:		;Bprocess_breakout:
+	XCHG;		;ex      de,hl   	;save hl temp
+	POP H;		;pop	hl		;get users pc
+	INX H;		;inc	hl		; step by 1 to emulate RST instruction
+	PUSH H;		;push	hl		; put modified pc back
+	LXI H,P1;	;ld	hl,p1_breakout
+	PUSH H;		;push	hl		;to allow retn
+	RETN;		;retn			; restore interrupt state to that existing
+; before nmi executed
+;
+P1:			;p1_breakout:
+	XCHG;		;ex      de,hl
+	JMP PBREAKPOINT	;jp	process_breakpoint	;go to breakpoint processor
+;
+
+
+;	end	;not for combined source code
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+
+; Hacked by DaveM Penguin, Ironic Research Labs, 1995
+; Zilog source code needs M80 assembler and L80 linker
+; Symbols limited to 6-character M80 default.
+
+
+
+;  (c) copyright 1987, 1988 Z-World, Davis, CA 956216
+
+; The remote communications kernel.
+; This module must be linked with another module which handles initialization
+; and serial port communications to form a complete remote communications
+; kernel for the remote debugger.
+;
+;  		     Remote DSD80 Communications Protocol
+;
+;  note: 2 protocols are supported, "new" and "old" style.
+;  
+;   code	description		arguments			return
+;  ----	-----------		---------			------
+;  80h	port input		<port>				<value>
+;  81h	port output		<port> <value>
+;  
+;  82h	byte read		<address>			<byte>
+;  83h	byte write		<address> <byte>
+;  
+;  84h	word read		<address>			<word>
+;  85h	word write		<address> <word>
+;  
+;  86h	ldir to remote		<destin> <byte_count> <bytes>
+;  87h	ldir from remote	<source> <byte_count>		<bytes>
+;  88h	ldir in remote		<source> <destin> <byte_count>	<ack>
+;  
+;  note: following command always returns flag as FFh if new-style 
+;  commands are enabled
+;  89h	compare memory		<addr1> <addr2> <byte_count>	<flag>
+;  
+;  8Ah	set breakpoint		<address>			<byte>
+;  8Bh	return breakpoint					<rst>
+;  
+;  8Ch	return storage						<st> <j> <z>
+;  
+;  old style execute command
+;  8Dh	execute program		<registers>			<registers>
+;  
+;  new style execute command
+;  8Dh	execute program		<registers>	<FFh><registers>
+;  	(print/display while execute)		<1><string>		<8Dh>
+;   FFH means exectution is terminated and registers follow. A "1"
+;   indicates a byte follows for
+;   display. To continue execution the host must send another 8dh.
+;  
+;  8Eh	trace instruction	<instruction> <registers>	<registers>
+;  8Fh	enable new style protocol (formerly stop, a nop)
+;  90h	set flag bits		<mask>				none
+;  91h	clear flag bits		<mask>
+;  
+;  
+;  <ack> 	8 bit any value to signal end when ldir finished in remote
+;  <address>	16 bit address, least significant byte (LSB) first
+;  <byte>	8 bit memory value read or written
+;  <byte_count>	16 bit byte count, LSB first
+;  <bytes>	8 bit bytes in block transfer
+;  <destin>	16 bit destination address
+;  <flag> 	a zero or non-zero flag byte
+;  <instruction>	byte count of instruction at location PC 1-4
+;  <j>		16 bit address of junk location in remote
+;  <port> 	8 bit input/output port
+;  <registers>	registers AF BC DE HL SP PC IX IY AF' BC' DE' HL', LSB first
+;  <rst>  	8 bit breakpoint opcode, restart instruction
+;  <source>	16 bit source address, LSB first
+;  <st>		16 bit address of storage in remote
+;  <value>	8 bit value to/from I/O port
+;  <word> 	16 bit memory location read or written, LSB first
+;  <z>		16 bit address of always zero location in remote
+
+;	title	DSD80 Remote Communications Module
+
+; rdrivmin.180
+;
+; 7-August-88 - version using minimum RAM
+;
+; Uses only 7 bytes of RAM plus plus 30-40 bytes of stack space.
+;
+; Execute function and compare function changed.
+; Compare function now a dummy which always returns false.
+; If compare function returns false on equal compare, DSD80 in host
+; knows new style driver installed.
+;
+; Execute function returns registers introduced by 0ffh.
+; During execution character printing allowed.
+; Target program sends byte count (not 0ffh) followed by string to print,
+; then waits for acknowledge character.
+;
+;
+; (c) copyright 1988 Z-World, Davis, CA USA
+
+;	name	rd	;not M80
+
+;	cseg
+;	extrn	read_char
+;	extrn   write_char
+;	extrn   initialize
+;	extrn	run_begin
+;	extrn   run_end
+
+; *** descriptions of externals
+; read_char, write_char - character transmission to host
+; run_begin, run_end - target specific code to enable, disable interrupts
+;                      etc. when execution begins, ends
+; initialize - called one time to initialize communications link
+;
+
+;	public	preset
+;	public  process_breakpoint
+;	public  do_print
+;	public  cpdo_print
+;	public	aprocess_breakpoint
+;	extrn	breakpoint_opcode
+;breakpoint_opcode	equ	0ffh	; rst 38h
+
+;
+; *** description of publics
+; preset - main entry point - never exits
+; process_breakpoint - RST vector jumps to this address
+; do_print - sends a byte for printing to host
+;
+
+
+;	(C) 1986 SOFT ADVANCES
+;	ALL RIGHTS RESERVED
+;
+;first_function		equ	80h	; first function code
+;jump_opcode		equ	0C3h	; JP opcode
+;call_opcode		equ	0cdh	; call opcode
+;retn_opcode		equ	45EDh	; RETN opcode
+FIRSTFUNCT		equ	80h	; first function code
+JUMPOPCODE 		equ	0C3h	; JP opcode
+CALLOPCODE 		equ	0cdh	; call opcode
+RETNOPCODE 		equ	45EDh	; RETN opcode
+
+; dummy storage locations exist as artifacts
+; should be in rom
+storage:	; stores to next 194 locs supressed from remote
+;zero:		;dw	0
+ZERODW:	dw	0
+junk:	dw	0
+
+;; call here to start things off
+; stack pointer must be set on entry
+preset:
+	PUSH PSW;	;push	af	;stack space
+	PUSH PSW;	;push	af
+	PUSH PSW;	;push	af	;stack space
+	LXIY 0;		;ld	iy,0
+	DADY SP;	;add	iy,sp	;set iy
+	LXI H,-22;	;ld	hl,-22
+	DAD SP;		;add	hl,sp
+	SPHL;		;ld	sp,hl	;make stack frame for reg storage
+; see process_breakpoint below for map of stack frame used
+	CALL INITIALIZE	;call	initialize		; initialize serial ports
+; fall through to function loop
+
+;;	function loop
+;
+;	this routine reads function codes and dispatches to
+;	appropriate function processor, it never exits
+
+;
+AFUNCTION:		;Afunction_loop:
+	CALL READCHAR	;call	read_char		; get function
+	SUI FIRSTFUNCT;	;sub	first_function
+	JC  AFUNCTION;	;JP	c,Afunction_loop		;  if code too low
+	CPI BFUNCTION+1;;cp	Bfunction_count+1
+	JNC AFUNCTION;	;JP	nc,Afunction_loop	;  if code too high
+
+	MOV L,A;	;ld	l,a			; get function processor
+	MVI H,0;	;ld	h,0
+	DAD H;		;add	hl,hl
+	LXI D,CFUNCTION	;ld	de,Cfunction_table
+	DAD D;		;add	hl,de
+	MOV E,M;	;ld	e,(hl)
+	INX H;		;inc	hl
+	MOV D,M;	;ld	d,(hl)
+	XCHG;		;ex	de,hl			; process function & repeat
+	PCHL;		;jp	(hl)	;execute the function
+
+
+CFUNCTION:		;Cfunction_table:
+	dw	PORTINPUT,PORTOUTPUT	;port_input,port_output
+	dw	BYTEREAD,BYTEWRITE	;byte_read,byte_write
+	dw	WORDREAD,WORDREAD	;word_read,word_write
+	dw	LDIRTO,LDIRFROM,LDIRIN	;ldir_to,ldir_from,ldir_in
+	dw	COMPARE			;compare
+	dw	SETBREAKPOINT,ARETURN	;set_breakpoint,Areturn_breakpoint
+	dw	BRETURN			;Breturn_storage
+	dw	GO,TRACE,STOP		;go,trace,stop
+;Bfunction_count	equ	($-Cfunction_table)/2
+BFUNCTION:		EQU 	($-CFUNCTION)/2
+
+
+PORTINPUT:		;port_input:
+	CALL READCHAR	;call	read_char	;get port address
+	MOV C,A;	;ld	c,a
+	MVI B,0;	;ld	b,0	;for 64180
+	INP A;		;in	a,(c)
+	CALL WRITECHAR	;call	write_char
+	JMP AFUNCTION	;jp	Afunction_loop
+;
+PORTOUTPUT:		;port_output:
+	CALL READCHAR	;call	read_char	;port
+	MOV C,A;	;ld	c,a
+	CALL READCHAR	;call	read_char
+	MVI B,0;	;ld	b,0
+	OUTP A;		;out	(c),a
+	JMP AFUNCTION	;jp	Afunction_loop
+;
+;;	byte read
+;
+BYTEREAD:		;byte_read:
+	CALL GETADDRESS	;call	get_address
+	MOV A,M;	;ld	a,(hl)
+	CALL WRITECHAR	;call	write_char
+	JMP AFUNCTION	;jp	Afunction_loop
+
+
+;;	byte write
+;
+BYTEWRITE:		;byte_write:
+	CALL GETADDRESS	;call	get_address
+	CALL READCHAR	;call	read_char
+	MOV M,A;	;ld	(hl),a
+	JMP AFUNCTION	;jp	Afunction_loop
+;;
+;
+WORDREAD:		;word_read:
+	CALL GETADDRESS	;call	get_address
+	MOV A,M;	;ld	a,(hl)
+	CALL WRITECHAR	;call	write_char
+	INX H;		;inc	hl
+	MOV A,M;	;ld	a,(hl)
+	CALL WRITECHAR	;call	write_char
+	JMP AFUNCTION	;jp	Afunction_loop
+
+
+;;	word write
+;
+WORDWRITE:		;word_write:
+	CALL GETADDRESS		;call	get_address		; fetch target address
+	CALL GETDESTINATION	;call	get_destination		;	value
+	MOV M,E;	;ld	(hl),e
+	INX H;		;inc	hl
+	MOV M,D;	;ld	(hl),d
+	JMP AFUNCTION	;jp	Afunction_loop
+
+;;	get address
+;
+;	exit	HL	address
+;	uses	AF
+;
+GETADDRESS:		;get_address:
+	CALL READCHAR	;call	read_char
+	MOV L,A;	;ld	l,a
+	CALL READCHAR	;call	read_char
+	MOV H,A;	;ld	h,a
+	ret
+
+;;	get byte count
+;
+;	exit	BC	byte count
+;	uses	AF
+;
+GETBYTECOUNT:		;get_byte_count:
+	CALL READCHAR	;call	read_char
+	MOV C,A;	;ld	c,a
+	CALL READCHAR	;call	read_char
+	MOV B,A;	;ld	b,a
+	ret
+
+
+;;	get destination
+;
+;	exit	DE	address
+;	uses	AF
+;
+GETDESTINATION:		;get_destination:
+	CALL READCHAR	;call	read_char
+	MOV E,A;	;ld	e,a
+	CALL READCHAR	;call	read_char
+	MOV D,A;	;ld	d,a
+	ret
+
+
+;;	ldir from (remote)
+;
+LDIRFROM:		;ldir_from:
+	CALL GETADDRESS	;call	get_address
+	CALL GETBYTECOUNT;call	get_byte_count
+lfr1:	MOV A,M;	;ld	a,(hl)
+	CALL WRITECHAR	;call	write_char
+	INX H;		;inc	hl
+	DCX B;		;dec	bc
+	MOV A,B;	;ld	a,b
+	ORA C;		;or	c
+	JNZ LFR1;	;jp	nz,lfr1
+	JMP AFUNCTION	;jp	Afunction_loop
+
+
+;;	ldir in
+;
+LDIRIN:			;ldir_in:
+	CALL GETADDRESS		;call	get_address
+	CALL GETDESTINATION	;call	get_destination
+	CALL GETBYTECOUNT	;call	get_byte_count
+;
+	LDIR;		;ldir
+;
+	CALL WRITECHAR	;call	write_char		; acknowledge end of transfer
+	JMP AFUNCTION	;jp	Afunction_loop
+
+
+
+;;	ldir to (remote)
+;
+LDIRTO:			;ldir_to:
+	CALL GETADDRESS	;call	get_address
+	CALL GETBYTECOUNT;call	get_byte_count
+ltr1:	CALL READCHAR	;call	read_char
+	MOV M,A;	;ld	(hl),a
+	INX H;		;inc	hl
+	DCX B;		;dec	bc
+	MOV A,B;	;ld	a,b
+	ORA C;		;or	c
+	JNZ LTR1;	;jp	nz,ltr1
+	JMP AFUNCTION	;jp	Afunction_loop
+
+;;	set breakpoint
+;
+; place a breakpoint opcode at location specified by host
+;
+SETBREAKPOINT:		;set_breakpoint:
+	CALL GETADDRESS	;call	get_address
+	MOV A,M;	;ld	a,(hl)
+	MVI M,BREAKOPCODE;ld	(hl),breakpoint_opcode
+	CALL WRITECHAR	;call	write_char
+	JMP AFUNCTION	;jp	Afunction_loop
+
+;;	return breakpoint
+;
+; tell host what the breakpoint opcode is
+;
+ARETURN:		;Areturn_breakpoint:
+	MVI A,BREAKOPCODE;ld	a,breakpoint_opcode
+	CALL WRITECHAR	;call	write_char
+	JMP AFUNCTION	;jp	Afunction_loop
+
+;;
+stop:	JMP AFUNCTION	;jp	Afunction_loop
+
+
+
+; save regs
+;<registers>	registers AF BC DE HL SP PC IX IY AF' BC' DE' HL', LSB first
+; send regs to remote
+PUTREGISTERS:		;put_registers:
+	PUSHIY;		;push	iy
+	POP H;		;pop	hl	;pointer to register file
+	MVI B,12;	;ld	b,12	; af bc de hl
+sendr1:	MOV A,M;	;ld	a,(hl)
+	CALL WRITECHAR	;call	write_char	;least
+	INX H;		;inc	hl
+	MOV A,M;	;ld	a,(hl)
+	CALL WRITECHAR	;call	write_char	;most
+	DCX H;		;dec	hl
+	DCX H;		;dec	hl
+	DCX H;		;dec	hl
+	DJNZ SENDR1;	;djnz	sendr1	;loop
+	ret
+;
+; get regs from remote
+;
+GETREGISTERS:		;get_registers:
+	PUSHIY;		;push	iy
+	POP H;		;pop	hl	;pointer to register file
+	MVI B,12;	;ld	b,12	; af bc de hl
+getr1:	CALL READCHAR	;call	read_char	;char to a
+	MOV M,A;	;ld	(hl),a
+	INX H;		;inc	hl
+	CALL READCHAR	;call	read_char
+	MOV M,A;	;ld	(hl),a	;most
+	DCX H;		;dec	hl
+	DCX H;		;dec	hl
+	DCX H;		;dec	hl
+	DJNZ GETR1;	;djnz	getr1	;loop
+	ret
+
+;<registers>	registers AF BC DE HL SP PC IX IY AF' BC' DE' HL', LSB first
+; enter here as if from an rst instruction, build a stack as follows:
+;
+;   ...
+;  existing stack, top word
+;  return address (address pushed by RST less 1) or next execution adr
+;  a word pushed on stack to aid in restoring hl on resumption of execution
+;  af  <-- iy set to point here
+;  bc
+;  de
+;  hl
+;  A word pointing to "existing stack" above. Keep track of user's SP.
+;  copy of "return address" above, location to keep track of PC
+;  ix
+;  iy
+;  af'
+;  bc'
+;  de'
+;  hl'
+
+
+PBREAKPOINT:		;process_breakpoint:
+	XTHL;		;ex	(sp),hl
+	DCX H;		;dec	hl	;adjust for rst
+	XTHL;		;ex	(sp),hl
+APROCESS:		;aprocess_breakpoint:	;alternate entry, for unsolicited breakpoints
+; save regs
+
+	PUSH PSW;	;push	af	;spare space to protect stack
+	PUSH PSW;	;push	af	;save regs now
+	PUSH B;		;push	bc
+	PUSH D;		;push	de
+	PUSH H;		;push	hl
+	LXI H,12;	;ld	hl,12
+	DAD SP;		;add	hl,sp	;user stack pointer
+	PUSH H;		;push	hl	;user stack
+	DCX H;		;dec	hl
+	DCX H;		;dec	hl	;point to return address
+	MOV E,M;	;ld	e,(hl)	;now user pc
+	INX H;		;inc	hl
+	MOV D,M;	;ld	d,(hl)
+	PUSH D;		;push	de	;on stack
+	PUSHIX;		;push	ix
+	PUSHIY;		;push	iy
+	EXX;		;exx
+	EXAF;		;ex	af,af'
+	PUSH PSW;	;push	af
+	PUSH B;		;push	bc
+	PUSH D;		;push	de
+	PUSH H;		;push	hl	;all registers on stack
+	LXIY 22;	;ld	iy,22	;offset to af
+	DADY SP;	;add	iy,sp	; use iy to point to reg file
+	JMP GO2		;jp	go2	; continue
+;
+;;	go
+;
+go:
+	CALL GETREGISTERS;call	get_registers		; get register values over link
+	CALL RUNBEGIN	;call	run_begin	; set asynchronous interrupt
+	JMP EXECUTE	;jp	execute			; execute program,return to go2
+; come here from process breakpoint
+go2:	CALL RUNEND	;call	run_end			; unset async interrupt
+	MVI A,0FFH;	;ld	a,0ffh
+	CALL WRITECHAR	;call	write_char	;new protocol, ff introduces registers
+	CALL PUTREGISTERS;call	put_registers		; return new registers
+	JMP AFUNCTION	;jp	Afunction_loop
+;
+
+;;	compare - included for compatibility with previous versions
+;	always returns not equal ( A dummy routine)
+;
+compare:
+	CALL GETADDRESS		;call	get_address
+	CALL GETDESTINATION	;call	get_destination
+	CALL GETBYTECOUNT	;call	get_byte_count
+	MVI A,-1;	;ld	a,-1			; no match, return non-zero
+	CALL WRITECHAR	;call	write_char
+	JMP AFUNCTION	;jp	Afunction_loop
+
+;;	return storage
+;
+BRETURN:		;Breturn_storage:
+	LXI H,STORAGE;	;ld	hl,storage		; send adr of local storage useable
+	CALL AWRITEHL	;call	Awrite_hl		; by DSD80 for display optimizing
+	LXI H,JUNK;	;ld	hl,junk			; send address of junk word
+	CALL AWRITEHL	;call	Awrite_hl
+	LXI H,ZERODW;	;ld	hl,zero			; send address of always zero word
+	CALL AWRITEHL	;call	Awrite_hl
+	JMP AFUNCTION	;jp	Afunction_loop
+
+
+;;	write hl
+;
+;	entry	HL	word to send
+;	uses	AF
+;
+AWRITEHL:		;Awrite_hl:
+	MOV A,L;	;ld	a,l
+	CALL WRITECHAR	;call	write_char
+	MOV A,H;	;ld	a,h
+	JMP WRITECHAR	;jp	write_char
+
+
+
+;
+;<registers>	registers AF BC DE HL SP PC IX IY AF' BC' DE' HL', LSB first
+;  stack map on entry to execute
+;   ...
+;  existing stack, top word
+;  return address (address pushed by RST less 1) or next execution adr
+;  a word pushed on stack to aid in restoring hl on resumption of execution
+;  af  <-- iy set to point here
+;  bc
+;  de
+;  hl
+;  A word pointing to "existing stack" above. Keep track of user's SP.
+;  copy of "return address" above, location to keep track of PC
+;  ix
+;  iy
+;  af'
+;  bc'
+;  de'
+;  hl'
+; restore the registers
+execute:
+	POP H;		;pop	hl
+	POP D;		;pop	de
+	POP B;		;pop	bc
+	POP PSW;	;pop	af
+	EXAF;		;ex	af,af'
+	EXX;		;exx
+	POPIY;		;pop	iy
+	POPIX;		;pop	ix
+; now get user's pc
+	POP B;		;pop	bc	;pc desired
+	POP H;		;pop	hl	;stack pointer desired
+	DCX H;		;dec	hl
+	MOV M,B;	;ld	(hl),b	;push user pc on new stack
+	DCX H;		;dec	hl
+	MOV M,C;	;ld	(hl),c
+	POP B;		;pop	bc	;user's hl
+	DCX H;		;dec	hl	; push new hl on new stack
+	MOV M,B;	;ld	(hl),b
+	DCX H;		;dec	hl
+	MOV M,C;	;ld	(hl),c	; pushed on new stack
+; hl has user's new stack ptr
+	POP D;		;pop	de	; restore from old stack
+	POP B;		;pop	bc
+	POP PSW;	;pop	af	; last thing restored from old stack
+	SPHL;		;ld	sp,hl	;switch to new stack, setting SP
+	POP H;		;pop	hl	; restore hl and pc from new stack
+	ret		;return to user
+;
+
+; simulate the instruction at the simulated pc
+;
+trace:	CALL READCHAR	;call	read_char	;number of bytes in instruction
+	PUSH PSW;	;push	af	;save byte count in f
+	LXI H,0;	;ld	hl,0
+	SHLD SIMULATION	;ld	(simulation_area),hl	;nops in simulation area
+	SHLD SIMULATION+2;ld	(simulation_area+2),hl
+	CALL GETREGISTERS;call	get_registers	;get registers from commander
+	POP PSW;	;pop	af	;restore byte count of instruction
+	ORA A;		;or	a
+	JZ  AFUNCTION;	;jp	z,Afunction_loop	;error, zero length ins
+	MOV C,A;	;ld	c,a	;count
+	MVI B,0;	;ld	b,0
+	LDY L,-10;	;ld	l,(iy-10)	;get pc
+	LDY H,-10+1;	;ld	h,(iy-10+1)
+	LXI D,SIMULATION;ld	de,simulation_area	;move n byte ins to simulation
+	PUSH D;		;push	de	;save de
+	LDIR;		;ldir			;store
+	XCHG;		;ex	de,hl
+	MVI M,0C3H;	;ld	(hl),0c3h	;jp
+	INX H;		;inc	hl
+	MVI M,(TRACE2 MOD 256)	;ld	(hl),low trace2
+	INX H;		;inc	hl
+	MVI M,(TRACE2/256)	;ld	(hl),high trace2	;jp trace2 after simulation
+	POP D;		;pop	de
+	STY E,-10;	;ld	(iy-10),e	;new pc
+	STY D,-10+1;	;ld	(iy-10+1),d
+	JMP EXECUTE	;jp	execute	;go execute	;pc will be junk
+; return here after executing instruction in simulation area
+trace2:	PUSH PSW	;push	af	;dummy pc
+; save regs
+	PUSH PSW;	;push	af	;spare space to protect stack
+	PUSH PSW;	;push	af	;save regs now
+	PUSH B;		;push	bc
+	PUSH D;		;push	de
+	PUSH H;		;push	hl
+	LXI H,12;	;ld	hl,12
+	DAD SP;		;add	hl,sp	;user stack pointer
+	PUSH H;		;push	hl	;user stack
+	DCX H;		;dec	hl
+	DCX H;		;dec	hl	;point to return address
+	MOV E,M;	;ld	e,(hl)	;now user pc
+	INX H;		;inc	hl
+	MOV D,M;	;ld	d,(hl)
+	PUSH D;		;push	de	;on stack
+	PUSHIX;		;push	ix
+	PUSHIY;		;push	iy
+	EXX;		;exx
+	EXAF;		;ex	af,af'
+	PUSH PSW;	;push	af
+	PUSH B;		;push	bc
+	PUSH D;		;push	de
+	PUSH H;		;push	hl	;all registers on stack
+	LXIY 22;	;ld	iy,22	;offset to af
+	DADY SP;	;add	iy,sp	; use iy to point to reg file
+; register save finished
+	CALL PUTREGISTERS;call	put_registers	;send over new registers, pc wrong
+	JMP AFUNCTION	;jp	Afunction_loop
+;
+;; routine to print data, sending it to host
+; enter with byte in hl
+;
+CPDOPRINT:		;cpdo_print:
+	XCHG;		;ex	de,hl	;entry with byte in e
+DOPRINT:		;do_print:		;entry with byte in l
+	MVI A,1;	;ld	a,1
+	CALL WRITECHAR	;call	write_char
+	MOV A,L;	;ld	a,l
+	ANI 07FH;	;and	a,7fh
+	CALL WRITECHAR	;call	write_char
+	CALL READCHAR	;call	read_char	;wait for response
+	ret
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;	dseg
+	ORG RAMDBUG
+
+SIMULATION:		;simulation_area:
+	ds	7	;4 bytes for instruction, 3 for jp
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;	end
+
+
+
+
+	ENDM
+
+
+
+
+	    

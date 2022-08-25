@@ -1,0 +1,275 @@
+; Serial Input / Output Interface routines:
+
+; RESETSIO:	resets serial port
+; INSIOST:	detects serial input
+; INSIO:	inputs serial character
+; OUTSIO:	outputs serial character
+
+
+
+; Serial Interface routines.
+
+	  IF SERIALIO
+
+; Z80 SIO / DART constants.
+
+RSETXCVR  EQU 00011000B  ;reset DART transceiver (reg 0)
+RSETHAND  EQU 00010000B  ;reset DART external handshake inputs (reg 0)
+NOINT     EQU 00000000B  ;disable DART interrupts (reg 1)
+RCVRINT   EQU 00011000B  ;enable DART interrupts on all received bytes (reg 1)
+SIOCHAR   EQU 01000100B  ;SIO format  X16 clock, 1 stop bit (reg 4)
+RCVRENBL  EQU 11000001B  ;enable DART receiver (reg 3)
+XMTRENBL  EQU 01101000B  ;enable DART transmitter (reg 5)
+RCVRDY	  EQU 00000001B	 ;receiver ready status
+XMTRDY	  EQU 00000100B	 ;transmitter ready status
+
+DTR       EQU 7          ;DTR control bit (transmitter enable reg 5)
+RTS       EQU 1          ;RTS control bit
+
+DCD       EQU 3          ;DCD status bit
+DSR       EQU DCD        ;DSR status bit (Zilog "DCD")
+CTS       EQU 5          ;CTS status bit
+RIN       EQU 4          ;RI status bit (Zilog "Ring Indicator")
+EXT       EQU 1          ;external status bit
+RCV       EQU 0          ;receiver ready
+XMT       EQU 2          ;transmitter ready
+
+BAUDSET   EQU 01000111B  ;CTC counter = CLK/2 for baud clock generation
+
+
+
+; Serial interface routines for interrupt-driven serial input.
+
+          IF SERIALINT
+
+SERIOM    MACRO
+
+; Reset serial interface.
+
+RESETSIO: MVI A,BAUDSET  ;generate SIO baud clock
+          OUT BAUDCLK
+          MVI A,BAUD9600 ;at 9600 baud
+          OUT BAUDCLK
+
+          MVI A,RSETXCVR ;reset SIO transceivers (default reg 0)
+          OUT SIOCMD
+          NOP
+
+          MVI A,RSETHAND ;reset SIO handshake input sensing (reg 0)
+          OUT SIOCMD
+
+          MVI A,04H      ;set up SIO characters (index reg 4)
+          OUT SIOCMD
+          MVI A,SIOCHAR
+          OUT SIOCMD
+
+          LXI H,SIOINBUF ;init serial input buffer pointers
+          SHLD SIOINPTR  ;for interrupt routine
+          SHLD SIORDPTR  ;for read routine
+
+          LXI H,INTSIO   ;init vector pointer to interrupt routine
+          SHLD INTSIOVB
+
+          MVI A,02H      ;load interrupt vector (reg 2)
+          OUT SIOCMD
+          LXI H,INTSIOVB
+          MOV A,L        ;low byte only
+          OUT SIOCMD
+
+          MVI A,01H      ;enable interrupts for all received bytes (reg 1)
+          OUT SIOCMD
+          MVI A,RCVRINT
+          OUT SIOCMD
+
+          MVI A,03H      ;enable SIO receivers (reg 3)
+          OUT SIOCMD
+          MVI A,RCVRENBL
+          OUT SIOCMD
+
+          MVI A,05H      ;enable SIO transmitters with DTR and RTS (reg 5)
+          OUT SIOCMD
+          MVI A,XMTRENBL
+          SETB DTR,A
+          SETB RTS,A
+          OUT SIOCMD
+          RET
+
+; Interrupt routine for inputting byte from serial port.
+; Input byte is stored into SIOINBUF buffer via SIOINPTR pointer.
+
+INTSIO:   PUSH PSW
+          PUSH H
+          PUSH D
+          IN SIOSTAT            ;check serial input status ?
+          BIT RCV,A
+          JZ EXITSIO
+
+          IN SIODATA            ;get byte from input port
+          LHLD SIOINPTR         ;save in input buffer
+          MOV M,A
+          INX H                 ;update pointer for next byte
+          SHLD SIOINPTR
+
+          XCHG                  ;compare buffer pointer
+          LXI H,SIOINBUF+15     ;with max buffer pointer ?
+          ORA A
+          DSBC DE
+          JNC EXITSIO
+          LXI H,SIOINBUF        ;if overflow, reset to start of buffer
+          SHLD SIOINPTR
+
+EXITSIO:  POP D
+          POP H
+          POP PSW
+          EI
+          RETI                  ;(auto re-sets SIO interrupt)
+
+; Sample input status from serial input buffer pointers.
+; SIORDPTR read buf pointer is compared with SIOINPTR interrupt buf pointer.
+
+INSIOST:  PUSH H
+          PUSH D
+          LHLD SIOINPTR         ;compare interrupt buffer pointer
+          LDED SIORDPTR         ;with read buffer pointer ?
+          XRA A
+          DSBC DE               ;0 = read bytes up to date
+          MOV A,L
+          ORA H                 ;non-0 = bytes to be read
+          POP D
+          POP H
+	  RET
+
+; Input byte from serial input buffer.
+; Input byte read from SIOINBUF buffer via SIORDPTR read pointer.
+
+INSIO:    PUSH H
+          PUSH D
+          LHLD SIORDPTR         ;get byte from current read pointer
+          MOV A,M
+
+          XCHG                  ;compare read buffer pointer
+          LHLD SIOINPTR         ;with interrupt buffer pointer ?
+          ORA A                 ;(dont destroy read byte)
+          DSBC DE
+          JZ EXINSIO            ;0 = up to date
+
+          INX D                 ;else update read pointer to read next byte
+          SDED SIORDPTR         ;compare buffer pointer
+          LXI H,SIOINBUF+15     ;with max buffer pointer ?
+          ORA A                 ;(dont destroy read byte)
+          DSBC DE
+          JNC EXINSIO
+          LXI H,SIOINBUF        ;if overflow, reset to start of buffer
+          SHLD SIORDPTR
+
+EXINSIO:  POP D
+          POP H
+	  RET
+
+; Output byte to serial port.
+
+OUTSIO:   PUSH PSW
+WAITSIO:  IN SIOSTAT     ;transmitter ready ?
+	  BIT XMT,A
+	  JZ WAITSIO
+
+	  POP PSW
+	  OUT SIODATA    ;then output byte
+	  RET
+
+
+          ENDM
+
+
+          ELSE           ;NOT SERIALINT
+
+; Serial interface routines for polled serial input.
+
+SERIOM    MACRO
+
+; Reset serial interface.
+
+RESETSIO: MVI A,BAUDSET  ;generate SIO baud clock
+          OUT BAUDCLK
+          MVI A,BAUD9600 ;at 9600 baud
+          OUT BAUDCLK
+
+          MVI A,RSETXCVR ;reset SIO transceivers (default reg 0)
+          OUT SIOCMD
+          NOP
+
+          MVI A,RSETHAND ;reset SIO handshake input sensing (reg 0)
+          OUT SIOCMD
+
+          MVI A,04H      ;set up SIO characters (index reg 4)
+          OUT SIOCMD
+          MVI A,SIOCHAR
+          OUT SIOCMD
+
+          MVI A,01H      ;no interrupts on SIO (reg 1)
+          OUT SIOCMD
+          MVI A,NOINT
+          OUT SIOCMD
+
+          MVI A,03H      ;enable SIO receivers (reg 3)
+          OUT SIOCMD
+          MVI A,RCVRENBL
+          OUT SIOCMD
+
+          MVI A,05H      ;enable SIO transmitters with DTR and RTS (reg 5)
+          OUT SIOCMD
+          MVI A,XMTRENBL
+          SETB DTR,A
+          SETB RTS,A
+          OUT SIOCMD
+          RET
+
+; Sample input status from serial port.
+
+INSIOST:  IN SIOSTAT     ;get SIO status
+	  ANI RCVRDY     ;byte received ?
+	  RET
+
+; Input byte from serial port.
+
+INSIO:    IN SIOSTAT     ;receiver ready ?
+	  BIT RCV,A
+	  JZ INSIO
+
+          IN SIODATA     ;then input byte
+	  RET
+
+; Output byte to serial port.
+
+OUTSIO:   PUSH PSW
+WAITSIO:  IN SIOSTAT     ;transmitter ready ?
+	  BIT XMT,A
+	  JZ WAITSIO
+
+	  POP PSW
+	  OUT SIODATA    ;then output byte
+	  RET
+
+
+	  ENDM
+
+
+          ENDIF          ;SERIALINT
+
+
+	  ELSE           ;NOT SERIALIO
+
+; Null input/output routines if no serial interface.
+
+SERIOM    MACRO
+
+RESETSIO: RET
+INSIOST:  XRA A
+	  RET
+INSIO:    XRA A
+	  RET
+OUTSIO:   RET
+
+	  ENDM
+
+	  ENDIF          ;SERIALIO
