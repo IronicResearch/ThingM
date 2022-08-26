@@ -389,6 +389,11 @@ RELEASE1: IN KEYSENS     ;wait for key release
           LXI D,BNCETM   ;and debounce that one too
           CALL WAITX
 
+          IN KEYSENS     ;re-sense release
+          ANI COLMASK
+          XRI COLMASK
+          JNZ RELEASE1
+
           STC            ;got one...
           RET
 
