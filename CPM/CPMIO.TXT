@@ -1,0 +1,22 @@
+Ugh, this was tricky to figure out again, but this is the one!
+
+(1) Open 4NT shell
+
+(2) Copy *.asm files to thingm directory.
+Main directory is mapped to A: drive.
+Thingm subdirectory is mapped to C: drive.
+
+(3) Make DOS shell fullscreen via ALT+ENTER before invoking.
+
+(4) Invoke cpm.exe, and press keys past nag screen.
+You will be congratulated when you're successfully in at A0> prompt.
+Read the instructions about 'import' and 'export' commands.
+
+(5) Change to C: drive, import the new ASM file, and run MAC.
+        A0> c:
+        C0> import thseq242.asm
+        C0> dir
+        C0> mac thseq242.asm
+        C0> dir
+        C0> export thseq242.hex
+        C0> quit
