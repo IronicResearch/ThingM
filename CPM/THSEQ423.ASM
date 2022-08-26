@@ -127,7 +127,7 @@ NONEGNUM  SET true       ;no negative numbers
 ROMDBUG	  SET	1D80H		;debugger code memory
 RAMDBUG	  SET	9F80H		;debugger data memory
 
-*	  MACLIB RDEBUG
+;;	  MACLIB RDEBUG
 
 	  ENDIF
 
@@ -178,8 +178,8 @@ MTRG:	  EQU STRP              ;output trigger
 
 ; Home switch sensing polarity.
 
-*ACTIVLO   EQU false     	;input sense signals active low (open)
-*ACTIVHI   EQU NOT ACTIVLO	;input sense signals active high (closed)
+;;ACTIVLO   EQU false     	;input sense signals active low (open)
+;;ACTIVHI   EQU NOT ACTIVLO	;input sense signals active high (closed)
 
 	  IF true
 
@@ -333,7 +333,7 @@ ACCLXINT: EXX
 	  LXI H,CONSTINT
 	  SHLD INTCTCV0
 
-*	  LDED RUNPRECL	      ;load adjusted pre-decel step count (DE')
+;;	  LDED RUNPRECL	      ;load adjusted pre-decel step count (DE')
 	  LDA SWITMASK
 	  ORA A
 	  JNZ EXITACLX
@@ -795,9 +795,9 @@ EXITCURS: EXAF
 ; Motor revolution counter interrupt routine.
 ; Interrupts ping-pong between Count switch sensing and Home switch sensing.
 
-*PIOINTH:  EQU 10110111B       ;enable interrupt lines active high
-*PIOINTL:  EQU 10010111B       ;enable interrupt lines active low
-*PIOINTN:  EQU 00010111B       ;disable interrupt lines (active low)
+;;PIOINTH:  EQU 10110111B       ;enable interrupt lines active high
+;;PIOINTL:  EQU 10010111B       ;enable interrupt lines active low
+;;PIOINTN:  EQU 00010111B       ;disable interrupt lines (active low)
 PIOMASK:  EQU 11111111B       ;default interrupt line mask
 
 
@@ -1776,9 +1776,9 @@ GETSYNST: LDA CAMSYNST		;camera sync
 	  ORA C
 	  ORA D
 	  STA SYNCMASK		;= combined sync status
-*	  RZ
-*	  XRA E			;camera sync and sequencer are exclusive
-*	  STA SYNCMASK
+;;	  RZ
+;;	  XRA E			;camera sync and sequencer are exclusive
+;;	  STA SYNCMASK
 	  RET
 
 ; Put sync status for camera, projector, or aerial.
@@ -2269,7 +2269,7 @@ MSYN1:    DB '   ON+'
 
 	  IF LCD2ROW
 	  DB 'Sync On/Off:'
-*	  DB 'Sync Projectors On/Off:'
+;;	  DB 'Sync Projectors On/Off:'
 	  ENDIF
 
 SYNCIT:   PUSH PSW
@@ -3387,7 +3387,7 @@ TIMECOMP: LXI H,10000         ;compute lapse time compensation
 	  MVI A,100           ;compute shutter angle factor
 	  LDED EXPANGLE
 	  CALL MULTIPLY       ;... = 100 * decimal shutter angle
-*         LXI D,DCAMSPD       ;(camera speed default)
+;;         LXI D,DCAMSPD       ;(camera speed default)
 	  LDED SPEED
 	  CALL DIVIDE         ;compute exposure time compensation
 	  CALL ROUND
@@ -3447,7 +3447,7 @@ CONVSPD:  XCHG           ;input speed <-- HL
 
 RAMPCOMP: CALL MICROCHK  ;micro-step or half-step speed timing ?
 
-*         LHLD LOWSPDBF  ;transfer low speed
+;;         LHLD LOWSPDBF  ;transfer low speed
 	  LHLD MINSPEED  ;transfer low speed (user-defined)
           SHLD LOWSPD
           LHLD SPEED     ;transfer high speed
@@ -3483,12 +3483,12 @@ COMPCONS: LHLD SPEED     ;then compute constant speed
 ; Scale up intermediate speeds by factor of 8.
 
 COMPDIFF: LHLD HIGHSPD   ;compute speed difference
-          DAD H          ;scale up high speed * 8
+	  DAD H          ;scale up high speed * 8
           DAD H
           DAD H
           LDED LOWSPD
           XCHG
-          DAD H          ;scale up low speed * 8
+	  DAD H          ;scale up low speed * 8
           DAD H
 	  DAD H
           XCHG
@@ -3524,7 +3524,7 @@ COMPTIME: STX L,0        ;buffer incremental speeds
 	  PUSH B
           XCHG           ;re-compute incremental speed delta
 	  LHLD HIGHSPD   ;original high speed
-          DAD H          ;... scaled up * 8
+	  DAD H          ;... scaled up * 8
 	  DAD H
           DAD H
           XRA A
@@ -3539,7 +3539,7 @@ TOPOFF:   POP B
 	  POP H
           LXI D,0        ;null out speed delta
           LHLD HIGHSPD   ;top off at high speed
-          DAD H          ;... scaled up * 8
+	  DAD H          ;... scaled up * 8
           DAD H
           DAD H
 
@@ -3846,7 +3846,7 @@ ANGLEIT:  PUSH PSW
 VRSHCOMP: LHLD VARSHTR
           XCHG
           MVI A,100           ;compute decimal shutter angle factor
-          CALL MULTIPLY       ;... = 100 * shutter angle degrees
+	  CALL MULTIPLY       ;... = 100 * shutter angle degrees
 	  LXI D,360
           CALL DIVIDE         ;... / 360
           CALL ROUND
@@ -4095,7 +4095,7 @@ RUNMSG:   SHLD MSGBUF3+2
 
 	  LXI H,MRUN          ;display Run mode (local)
 	  SHLD MSGBUF3
-*	  CALL OUTLED3
+;;	  CALL OUTLED3
 
 	  XRA A               ;clear run-time keypad status
 	  STA KEYSTAT
@@ -4192,7 +4192,7 @@ SKIP180:  LDA STEPSTAT        ;step camera ?
 	  SHLD RUNSKIPR
 
 SKIPSWAP: LHLD COUNTER        ;display total frame count
-*	  CALL OUTNUM
+;;	  CALL OUTNUM
 	  CALL PUTNUM
 	  CALL OUTCNTRQ       ;+ full counter display too
 
@@ -4334,7 +4334,7 @@ WAITOPEN: CALL PRECHECK       ;quick check for key press
 	  JNZ WAITOPEN
 
 	  LHLD COUNTER        ;display updated total frame count
-*	  CALL OUTNUM
+;;	  CALL OUTNUM
 	  CALL PUTNUM
 	  CALL OUTCNTRQ       ;+ full counter display too
 
@@ -4389,9 +4389,9 @@ endif
 WAITOVER: CALL OUTCNTRS       ;display all frame counters
 
 	  LHLD MSGBUF3        ;display whatever Run mode
-*	  CALL OUTMUX3        ;local + remote
+;;	  CALL OUTMUX3        ;local + remote
 	  LHLD COUNTER        ;display updated total frame count
-*	  CALL OUTMUX5        ;echo out LED + SIO
+;;	  CALL OUTMUX5        ;echo out LED + SIO
 
 LOOPOVER: CALL PRECHECK       ;check for run-time interruption ?
 	  CALL CHECKPT
@@ -4505,8 +4505,8 @@ WAIT360:  LDA MOTROVER	      ;wait til over
 	  ORA A
 	  JNZ WAIT360
 	  CALL UPDTCNTR	      ;update this half-rev as complete frame
-*	  CALL UPDTCNTS
-*	  CALL UPDTCNTF
+;;	  CALL UPDTCNTS
+;;	  CALL UPDTCNTF
 endif
 
 	  CALL PUTCAMPR
@@ -4537,8 +4537,8 @@ SEQCAMRA: LHLD RUNSTEPR		;check camera step counter
 	  MVI A,TRUE		;and toggle to projector sequence
 	  STA PROJSTAT
 	  LHLD RUNDISBF         ;un-buffer PRJ or AER id tag
-*	  SHLD MSGBUF3
-*	  CALL OUTLED3
+;;	  SHLD MSGBUF3
+;;	  CALL OUTLED3
 	  XRA A			;zero out time exposure
 	  STA EXPSTAT
 	  LHLD COUNTER		;save camera frame counter
@@ -4567,8 +4567,8 @@ SEQPROJ:  LHLD RUNSKIPR		;check projector skip counter
 	  MVI A,FALSE		;and toggle back to camera sequence
 	  STA PROJSTAT
 	  LXI H,MCAM
-*	  SHLD MSGBUF3
-*	  CALL OUTLED3
+;;	  SHLD MSGBUF3
+;;	  CALL OUTLED3
 	  LHLD RUNEXP		;re-load time exposure status, if any
 	  MOV A,H
 	  ORA L
@@ -4687,7 +4687,7 @@ UPDTCYCP: LHLD RUNSKIPR         ;else real skip counter over ?
 
 CONTLOOP: LXI H,MRUN          ;display Run mode (local + remote)
 	  SHLD MSGBUF3
-*	  CALL OUTMUX3
+;;	  CALL OUTMUX3
 
 	  XRA A
 	  STA SWITMASK        ;Home switch mask active
@@ -4714,7 +4714,7 @@ CONTLOOP: LXI H,MRUN          ;display Run mode (local + remote)
 	  CALL INITFADR	      ;initialize fader motor timing too
 
 WAITHOME: LHLD COUNTER        ;display pre-updated counter
-*	  CALL OUTNUM
+;;	  CALL OUTNUM
 	  CALL PUTNUM
 	  CALL OUTCNTRQ       ;+ extended counter display too
 	  CALL OUTCNTRX	      ;+ extra sync counter too
@@ -4738,7 +4738,7 @@ LOOPHOME: CALL PRECHECK       ;check for key press ?
 	  JNZ WAITHOME
 
 WAITLAST: LHLD COUNTER
-*	  CALL OUTNUM
+;;	  CALL OUTNUM
 	  CALL PUTNUM
 	  CALL OUTCNTRQ       ;+ extended counter display too
 	  CALL OUTCNTRX	      ;+ extra sync counter too
@@ -4756,7 +4756,7 @@ LOOPLAST: LDA MOTROVER        ;wait until last revolution
 
 	  CALL OUTCNTRS       ;display all frame counters
 	  LHLD COUNTER
-*	  CALL OUTNUM
+;;	  CALL OUTNUM
 
 	  CALL TRIGROFF       ;release output trigger
 
@@ -5539,7 +5539,7 @@ PRJACLON: LXI H,ACCLTBL2      ;use variable ramp table for projector
 	  LDA ADJSTPCT        ;sense if 0 adjustment
 	  MOV B,A
 	  LDA SWITSTAT
-*	  ORA B
+;;	  ORA B
 	  STA SWITMASK        ;ignore projector sensing switches NOT
 
 PRJDIRON: LDA PRJDIRST        ;projector direction forward or reverse ?
@@ -5551,9 +5551,9 @@ PRJDIRON: LDA PRJDIRST        ;projector direction forward or reverse ?
 	  IN MOTRCNTX
 	  RES  XSTP,A         ;step overide enable
 	  SETB XDIR,A         ;direction forward
-*	  RES  XNDC,A         ;projector motor enable
+;;	  RES  XNDC,A         ;projector motor enable
 	  IF NOT DUALPROJ * 0
-*	  RES  XNLP,A	      ;low-power release (pull-down R)
+;;	  RES  XNLP,A	      ;low-power release (pull-down R)
 	  ENDIF
 	  OUT MOTRCNTX
 
@@ -5592,9 +5592,9 @@ PRJREVON:
 	  IN MOTRCNTX
 	  RES  XSTP,A         ;step overide enable
 	  RES  XDIR,A         ;direction reverse
-*	  RES  XNDC,A         ;projector motor enable
+;;	  RES  XNDC,A         ;projector motor enable
 	  IF NOT DUALPROJ * 0
-*	  RES  XNLP,A	      ;low-power release (pull-down R)
+;;	  RES  XNLP,A	      ;low-power release (pull-down R)
 	  ENDIF
 	  OUT MOTRCNTX
 
@@ -5645,14 +5645,14 @@ AERLON:   MVI A,PIOMASK       ;switch mask bits
 	  IN MOTRCNTX	      ;aerial projector forward
 	  RES  XSTP,A         ;step overide enable
 	  SETB XDAX,A         ;aerial forward
-*	  RES  XNDC,A         ;aerial enable
+;;	  RES  XNDC,A         ;aerial enable
 	  OUT MOTRCNTX
 	  RET
 
 AERREVON: IN MOTRCNTX         ;aerial projector reverse
 	  RES  XSTP,A         ;step overide enable
 	  RES  XDAX,A         ;aerial reverse
-*	  RES  XNDC,A         ;aerial enable
+;;	  RES  XNDC,A         ;aerial enable
 	  OUT MOTRCNTX
 	  RET
 
@@ -5676,14 +5676,14 @@ SYNCON:   MVI A,PIOMASK       ;switch mask
 	  IN MOTRCNTX
 	  RES  XSTP,A         ;step overide enable
 	  SETB XDAX,A         ;aerial forward
-*	  RES  XNDC,A         ;aerial enable
+;;	  RES  XNDC,A         ;aerial enable
 	  OUT MOTRCNTX
 	  JMP PRJDIRSN
 
 AEREVSYN: IN MOTRCNTX
 	  RES  XSTP,A         ;step overide enable
 	  RES  XDAX,A         ;aerial reverse
-*	  RES  XNDC,A         ;aerial enable
+;;	  RES  XNDC,A         ;aerial enable
 	  OUT MOTRCNTX
 
 PRJDIRSN: LDA PRJDIRST        ;projector direction forward or reverse ?
@@ -5693,14 +5693,14 @@ PRJDIRSN: LDA PRJDIRST        ;projector direction forward or reverse ?
 	  IN MOTRCNTX	      ;projector forward
 	  RES  XSTP,A         ;step overide enable
 	  SETB XDIR,A         ;motor forward
-*	  RES  XNDC,A         ;projector enable
+;;	  RES  XNDC,A         ;projector enable
 	  OUT MOTRCNTX
 	  RET
 
 SYNREVON: IN MOTRCNTX         ;projector reverse
 	  RES  XSTP,A         ;step overide enable
 	  RES  XDIR,A         ;motor reverse
-*	  RES  XNDC,A         ;projector enable
+;;	  RES  XNDC,A         ;projector enable
 	  OUT MOTRCNTX
 	  RET
 
@@ -5751,14 +5751,14 @@ MOTORNUL:
 	  IN MOTRCNTL	        ;all motors off
 	  RES  MNDC,A           ;camera DC motor power enable
 	  RES  MNPR,A           ;projector DC motor power enable
-*	  SETB MNLP,A           ;camera low-power enable (pull-down R)
+;;	  SETB MNLP,A           ;camera low-power enable (pull-down R)
 	  SETB MSTP,A           ;camera step overide disable (pull-down AND)
 	  OUT MOTRCNTL
 
 	  IN MOTRCNTX           ;all motors off
-*	  RES  XNDC,A           ;projector DC motor enable (continuous)
+;;	  RES  XNDC,A           ;projector DC motor enable (continuous)
 	  IF NOT DUALPROJ * 0
-*	  SETB XNLP,A           ;projector low-power enable (pull-down R)
+;;	  SETB XNLP,A           ;projector low-power enable (pull-down R)
 	  ENDIF
 	  SETB XSTP,A           ;step overide disable (pull-down AND)
 	  OUT MOTRCNTX
@@ -5796,13 +5796,13 @@ MOTORDC0:
 	  IN MOTRCNTL	        ;all motors off
 	  SETB MNDC,A           ;camera DC disable
 	  SETB MNPR,A           ;projector DC disable
-*	  SETB MNLP,A           ;camera low-power (pull-down R)
+;;	  SETB MNLP,A           ;camera low-power (pull-down R)
 	  OUT MOTRCNTL
 
 	  IN MOTRCNTX           ;all motors off
-*	  SETB XNDC,A           ;projector DC motor disable
+;;	  SETB XNDC,A           ;projector DC motor disable
 	  IF NOT DUALPROJ * 0
-*	  SETB XNLP,A           ;projector low-power (pull-down R)
+;;	  SETB XNLP,A           ;projector low-power (pull-down R)
 	  ENDIF
 	  OUT MOTRCNTX
 
@@ -5861,16 +5861,16 @@ TRIGROFF: IN TRIGPORT
 ; Timer and Counter commands.
 
 IC000LRC: EQU 11000111B ;interrupt + counter + load + reset + control
-*IC000LNC: EQU 11000101B ;interrupt + counter + load + no reset + control
+;;IC000LNC: EQU 11000101B ;interrupt + counter + load + no reset + control
 NC000NRC: EQU 01000011B ;no int + counter + no load + reset + control
-*NC000NNC: EQU 01000001B ;no int + counter + no load + no reset + control
+;;NC000NNC: EQU 01000001B ;no int + counter + no load + no reset + control
 
 IT400LRC: EQU 10000111B ;interrupt + timer/16 + load + reset + control
 IT400LNC: EQU 10000101B ;interrupt + timer/16 + load + no reset + control
-*NT400NRC: EQU 00000011B ;no int + timer/16 + no load + reset + control
+;;NT400NRC: EQU 00000011B ;no int + timer/16 + no load + reset + control
 
 IT800LRC: EQU 10100111B ;interrupt + timer/256 + load + reset + control
-*IT800LNC: EQU 10100101B ;interrupt + timer/256 + load + no reset + control
+;;IT800LNC: EQU 10100101B ;interrupt + timer/256 + load + no reset + control
 NT800NRC: EQU 00100011B ;no int + timer/256 + no load + reset + control
 
 ; Initialize timers / counters with interrupts.
@@ -5956,8 +5956,8 @@ INITMOTR: DI
 	  LHLD STEPCNT        ;adjust step count for pre-deceleration
 	  XRA A
 	  DSBC BC             ;... = step count - decel count
-*	  LDED ADJSTPCT	      ;... - adjustment count
-*	  DSBC DE
+;;	  LDED ADJSTPCT	      ;... - adjustment count
+;;	  DSBC DE
 	  XCHG                ;load pre-decel step count --> DE'
 	  SDED RUNPRECL
 	  PUSH D
@@ -6737,7 +6737,7 @@ if 0
 	  CALL RAMPCOMP       ;re-compute ramp table for projector
 	  CALL TIMECOMP       ;re-compute compensation times
 else
-*	  CALL SPEEDCMP	      ;compute speed based on exposure time
+;;	  CALL SPEEDCMP	      ;compute speed based on exposure time
 	  CALL RAMPCOMP       ;compute initial ramp table
 	  CALL TIMECOMP       ;compute compensation times
 	  CALL OPENCOMP       ;compute open-shutter counts
@@ -6805,7 +6805,7 @@ RSETDBUG: IN SWITCH           ;check trigger port
 
 	  JMP ROMDBUG         ;goto debugger
 
-*	  RDEBUGM
+;;	  RDEBUGM
 
 	  ENDIF               ;DEBUGGER
 
@@ -6993,3 +6993,4 @@ STACK:    EQU RAMADDR+2000H
 
 	  END
 
+

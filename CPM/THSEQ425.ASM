@@ -4807,7 +4807,7 @@ CAMFWDON:
 	  SETB XSTP,A         ;projector step disable
 	  SETB XDIR,A         ;camera forward
 	  RES  XNAX,A         ;camera enable
-*	  RES  XNLP,A
+;;	  RES  XNLP,A
 	  OUT MOTRCNTX
 
 	  else
@@ -4855,7 +4855,7 @@ CAMREVON:
 	  SETB XSTP,A         ;projector step disable
 	  RES  XDIR,A         ;camera reverse
 	  RES  XNAX,A         ;camera enable
-*	  RES  XNLP,A
+;;	  RES  XNLP,A
 	  OUT MOTRCNTX
 
 	  else
@@ -6228,3 +6228,4 @@ STACK:    EQU RAMADDR+2000H
 
 	  END
 
+
