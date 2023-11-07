@@ -10,6 +10,7 @@ int hex2bin(std::string &hexfile, std::string &binfile)
 	char str[48];
 	char buf[16];
 	int count, offset, pad, hex, sum;
+	int index = 0, padding = 0;
 
 	if (fhex == NULL) {
 		printf("unable to open hexfile: %s\n", hexfile.c_str());
@@ -41,7 +42,17 @@ int hex2bin(std::string &hexfile, std::string &binfile)
 		}
 		printf("%02x\n", sum);	
 
-		fwrite(buf, sizeof(char), 16, fbin);
+		// padding < 16 bytes
+		if (padding > 0) {
+			if (offset < index + padding)
+				padding = offset - index;
+			for (int k = 0; k < padding; k++, index++)
+				fwrite(&pad, 1, 1, fbin);
+		}
+
+		fwrite(buf, sizeof(char), count, fbin);
+		index += count;
+		padding = 16 - count;
 	}
 
 	fclose(fhex);
