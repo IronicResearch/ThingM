@@ -8,7 +8,7 @@ int hex2bin(std::string &hexfile, std::string &binfile)
 	FILE* fhex = fopen(hexfile.c_str(), "r");
 	FILE* fbin = fopen(binfile.c_str(), "w");
 	char str[48];
-	short buf[16];
+	char buf[16];
 	int count, offset, pad, hex, sum;
 
 	if (fhex == NULL) {
@@ -41,7 +41,7 @@ int hex2bin(std::string &hexfile, std::string &binfile)
 		}
 		printf("%02x\n", sum);	
 
-		fwrite(buf, sizeof(short), 16, fbin);
+		fwrite(buf, sizeof(char), 16, fbin);
 	}
 
 	fclose(fhex);
