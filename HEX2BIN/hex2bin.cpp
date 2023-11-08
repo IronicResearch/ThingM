@@ -32,7 +32,7 @@ int hex2bin(std::string &hexfile, std::string &binfile)
 		memset(buf, 0, sizeof(buf));
 		sscanf(str, ":%02x%04x%02x", &count, &offset, &pad);
 		printf("%02x %04x %02x ", count, offset, pad);
-		sum = 0;
+		sum = count + (offset & 0xFF) + (offset >> 8) + pad;
 		for (int i = 0, j = 9; i < count; i++, j+=2) {
 			sscanf(&str[j], "%02x", &hex);
 			buf[i] = hex;
@@ -40,6 +40,9 @@ int hex2bin(std::string &hexfile, std::string &binfile)
 			sum %= 256;
 			printf("%02x ", hex);
 		}
+		sum ^= 0xFF;
+		sum += 1;
+		sum &= 0xFF;
 		printf("%02x\n", sum);	
 
 		// padding < 16 bytes
