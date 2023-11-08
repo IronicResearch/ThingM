@@ -45,6 +45,10 @@ int hex2bin(std::string &hexfile, std::string &binfile)
 		sum &= 0xFF;
 		printf("%02x\n", sum);	
 
+		// padding for offset > 16 bytes
+		if (offset > index + 16)
+			padding = offset - index;
+
 		// padding < 16 bytes
 		if (padding > 0) {
 			if (offset < index + padding)
