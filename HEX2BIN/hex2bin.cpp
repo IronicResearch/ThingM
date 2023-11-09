@@ -11,6 +11,7 @@ int hex2bin(std::string &hexfile, std::string &binfile)
 	char buf[16];
 	int count, offset, pad, hex, sum;
 	int index = 0, padding = 0;
+	bool rewind = false;
 
 	if (fhex == NULL) {
 		printf("unable to open hexfile: %s\n", hexfile.c_str());
@@ -44,6 +45,18 @@ int hex2bin(std::string &hexfile, std::string &binfile)
 		sum += 1;
 		sum &= 0xFF;
 		printf("%02x\n", sum);	
+
+		// rewind case if offset goes retrograde
+		if (offset < index) {
+			rewind = true;
+			fseek(fbin, offset, SEEK_SET);
+			fwrite(buf, 1, count, fbin);
+			continue;
+		}
+		else if (rewind) {
+			rewind = false;
+			fseek(fbin, index, SEEK_SET);
+		}
 
 		// padding for offset > 16 bytes
 		if (offset > index + 16)
